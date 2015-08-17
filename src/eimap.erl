@@ -20,7 +20,7 @@
 -include("eimap.hrl").
 
 %% API
--export([start_link/1, connect/1, disconnect/1, get_folder_annotations/4, get_message_headers_and_body/5, get_path_tokens/3]).
+-export([start_link/1, set_credentials/3, connect/1, disconnect/1, get_folder_annotations/4, get_message_headers_and_body/5, get_path_tokens/3]).
 
 %% gen_fsm callbacks
 -export([disconnected/2, authenticate/2, authenticating/2, idle/2, wait_response/2]).
@@ -35,6 +35,7 @@
 %% public API
 start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, [ServerConfig], []).
 
+set_credentials(PID, User, Password) -> gen_fsm:send_all_state_event(PID, [set_credentials, User, Password]).
 connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
 
@@ -65,8 +66,8 @@ init([#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pa
                 host = Host,
                 port = Port,
                 tls  = TLS,
-                user = list_to_binary(User),
-                pass = list_to_binary(Pass)
+                user = ensure_binary(User),
+                pass = ensure_binary(Pass)
               },
     { ok, disconnected, State }.
 
@@ -143,6 +144,8 @@ handle_event(connect, _Statename, State) ->
 handle_event(disconnect, _StateName, State) ->
     close_socket(State),
     { next_state, disconnected, reset_state(State) };
+handle_event([set_credentials, User, Pass], disconnected, State) ->
+    { next_state, State, State#state{ user = User, pass = Pass } };
 handle_event({ ready_command, Command }, StateName, State) when is_record(Command, command) ->
     %%lager:info("Making command .. ~p", [Command]),
     ?MODULE:StateName(Command, State);
@@ -258,4 +261,8 @@ enque_command(Command, State) ->
 reenque_command(Command, State) ->
     %%lager:info("Re-queueing command ~p", [Command]),
     State#state { command_queue = queue:in_r(Command, State#state.command_queue) }.
+
+ensure_binary(Arg) when is_list(Arg) -> list_to_binary(Arg);
+ensure_binary(Arg) when is_binary(Arg) -> Arg;
+ensure_binary(_Arg) -> <<>>.
 
