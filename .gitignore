@@ -1,0 +1,9 @@
+*.beam
+.rebar
+erl_crash.dump
+ebin
+deps
+db
+log
+.*.swp
+Mnesia*
