@@ -65,8 +65,8 @@ init([#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pa
                 host = Host,
                 port = Port,
                 tls  = TLS,
-                user = User,
-                pass = Pass
+                user = list_to_binary(User),
+                pass = list_to_binary(Pass)
               },
     { ok, disconnected, State }.
 
