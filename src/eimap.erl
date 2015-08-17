@@ -16,11 +16,11 @@
 %% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 -module(eimap).
-
 -behaviour(gen_fsm).
+-include("eimap.hrl").
 
 %% API
--export([start_link/0, start_link/1, connect/1, disconnect/1, get_folder_annotations/4, get_message_headers_and_body/5, get_path_tokens/3]).
+-export([start_link/1, connect/1, disconnect/1, get_folder_annotations/4, get_message_headers_and_body/5, get_path_tokens/3]).
 
 %% gen_fsm callbacks
 -export([disconnected/2, authenticate/2, authenticating/2, idle/2, wait_response/2]).
@@ -33,8 +33,7 @@
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
 
 %% public API
-start_link() -> gen_fsm:start_link(?MODULE, [], []).
-start_link(_Args) -> gen_fsm:start_link(?MODULE, [], []).
+start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, [ServerConfig], []).
 
 connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
@@ -61,15 +60,13 @@ get_path_tokens(PID, From, ResponseToken) ->
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 %% gen_server API
-init(_Args) ->
-    Config = application:get_env(erl, imap, []),
-    AdminConnConfig = proplists:get_value(admin_connection, Config, []),
+init([#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pass = Pass }]) ->
     State = #state {
-                host = proplists:get_value(host, AdminConnConfig, ""),
-                port = proplists:get_value(port, AdminConnConfig, 993),
-                tls  = proplists:get_value(tls, AdminConnConfig, true),
-                user = list_to_binary(proplists:get_value(user, AdminConnConfig, "cyrus-admin")),
-                pass = list_to_binary(proplists:get_value(pass, AdminConnConfig, ""))
+                host = Host,
+                port = Port,
+                tls  = TLS,
+                user = User,
+                pass = Pass
               },
     { ok, disconnected, State }.
 
@@ -112,8 +109,8 @@ idle(process_command_queue, #state{ command_queue = Queue } = State) ->
        { empty, ModifiedQueue } ->
             { next_state, idle, State#state{ command_queue = ModifiedQueue } }
     end;
-idle({ data, Data }, State) ->
-    %%lager:info("Idling, server sent: ~p", [Data]),
+idle({ data, _Data }, State) ->
+    %%lager:info("Idling, server sent: ~p", [_Data]),
     { next_state, idle, State };
 idle(Command, State) when is_record(Command, command) ->
     %%lager:info("Idling"),
