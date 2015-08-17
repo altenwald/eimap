@@ -1,6 +1,19 @@
 This is a basic IMAP client implementation written in Erlang.
 
-The API is not finalized, and is currently limited to the eimap module.
+The API is not finalized, and is currently limited to the eimap module. Its
+current and only recognized use case is software intended to interact with a
+Kolab server environment which are written in Erlang. Expansion of that scope
+is welcome through community participation. However, currently the following
+disclaimer should be taken with seriousness:
+
+    USE AT YOUR OWN RISK. THINGS WILL CHANGE.
+
+The following is equally true, however:
+
+    CONTRIBUTIONS WELCOME. USAGE WELCOME.
+
+Usage
+=====
 
 To use eimap from your imap application add the following line to your rebar
 config:
