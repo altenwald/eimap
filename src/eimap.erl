@@ -25,7 +25,7 @@
          %% responses passed back equally blindly. in this mode the user is on
          %% their own and better know what they are doing. can only be activated
          %% when disconnected or idle
-         start_passthrough/1, end_passthrough/1,
+         start_passthrough/1, end_passthrough/1, passthrough/3,
          %% mutators
          set_credentials/3,
          %% connection management
@@ -42,7 +42,7 @@
 %% state record definition
 -record(state, { host, port, tls, user, pass, authed = false, socket,
                  command_serial = 1, command_queue = queue:new(),
-                 current_command, current_mbox, parse_state, passthrough = false }).
+                 current_command, current_mbox, parse_state, passthrough = false, passthrough_send_buffer = <<>> }).
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
 
 %% public API
@@ -50,6 +50,7 @@ start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> ge
 
 start_passthrough(PID) -> gen_fsm:send_event(PID, enter_passthrough).
 end_passthrough(PID) -> gen_fsm:send_event(PID, exit_passthrough).
+passthrough(PID, Receiver, Data) when is_pid(Receiver), is_binary(Data) -> gen_fsm:send_event(PID, { passthrough, Data }).
 set_credentials(PID, User, Password) -> gen_fsm:send_all_state_event(PID, [set_credentials, User, Password]).
 connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
@@ -90,15 +91,20 @@ disconnected(start_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = true } };
 disconnected(end_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = false } };
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = Passthrough } = State) ->
+disconnected({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
+    { next_state, disconnected, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = false} = State) ->
     {ok, Socket} = create_socket(Host, Port, TLS),
-    { next_state, state_on_connect(User, Passthrough), State#state { socket = Socket } };
+    { next_state, state_on_connect(User), State#state { socket = Socket } };
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, passthrough = true } = State) ->
+    {ok, Socket} = create_socket(Host, Port, TLS),
+    gen_fsm:send_event(self(), flush_passthrough_buffer),
+    { next_state, passthrough, State#state { socket = Socket } };
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
 
-state_on_connect(User, false) when is_list(User), length(User) > 0 -> authenticate;
-state_on_connect(_User, true) -> passthrough;
-state_on_connect(_User, _Passthrough) -> idle.
+state_on_connect(User) when is_list(User), length(User) > 0 -> authenticate;
+state_on_connect(_User) -> idle.
 
 authenticate({ data, _Data }, #state{ user = User, pass = Pass, authed = false } = State) ->
     Message = <<"LOGIN ", User/binary, " ", Pass/binary>>,
@@ -123,8 +129,13 @@ authenticating({ data, Data }, #state{ authed = in_process } = State) ->
 authenticating(Command, State) when is_record(Command, command) ->
     { next_state, authenticating, enque_command(Command, State) }.
 
-passthrough(send, #state{ socket = Socket } = State) ->
-    %%TODO write to socket, read response, return to sender
+passthrough(flush_passthrough_buffer, #state{ passthrough_send_buffer = Buffer } = State) ->
+    passthrough({ passthrough, Buffer }, State#state{ passthrough_send_buffer = <<>> });
+passthrough({ passthrough, Data }, #state{ socket = Socket, tls = true } = State) ->
+    ssl:send(Data, Socket),
+    { next_state, passthrough, State };
+passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
+    gen_tcp:send(Data, Socket),
     { next_state, passthrough, State };
 passthrough({ data, Data }, State) ->
     %%TODO: return Data to sender
