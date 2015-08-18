@@ -48,6 +48,23 @@ IMAP server only when the connection has been established.
 ImapServerArgs is an eimap_server_config record which is defined in the
 eimap.hrl file.
 
+Passthrough Mode
+================
+eimap supports a mode of operation which simply passes data between the user
+and the imap server blindly. This is known as "passthrough" mode and can be
+started and stopped with the start_passthrough/1 and end_passthrough/1
+functions.
+
+Data is queued up for sending with the passthrough/3 function, and will be
+sent to the server as soon as possible.
+
+Responses are similarly sent back to the initiator of the passthrough mode
+for dispatch in the form of { server_response, Data } messages.
+
+As the user is entirely responsible for the traffic and thereby the state
+of the IMAP conenction during passthrough, exercise all caution while using
+this mode.
+
 Commands
 ========
 
