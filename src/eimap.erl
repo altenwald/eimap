@@ -20,21 +20,36 @@
 -include("eimap.hrl").
 
 %% API
--export([start_link/1, set_credentials/3, connect/1, disconnect/1, get_folder_annotations/4, get_message_headers_and_body/5, get_path_tokens/3]).
+-export([start_link/1,
+         %% passthrough mode, where data is just sent to the server blindly and
+         %% responses passed back equally blindly. in this mode the user is on
+         %% their own and better know what they are doing. can only be activated
+         %% when disconnected or idle
+         start_passthrough/1, end_passthrough/1,
+         %% mutators
+         set_credentials/3,
+         %% connection management
+         connect/1, disconnect/1,
+         %% commands
+         get_folder_annotations/4,
+         get_message_headers_and_body/5,
+         get_path_tokens/3]).
 
 %% gen_fsm callbacks
--export([disconnected/2, authenticate/2, authenticating/2, idle/2, wait_response/2]).
+-export([disconnected/2, authenticate/2, authenticating/2, idle/2, passthrough/2, wait_response/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% state record definition
 -record(state, { host, port, tls, user, pass, authed = false, socket,
                  command_serial = 1, command_queue = queue:new(),
-                 current_command, current_mbox, parse_state }).
+                 current_command, current_mbox, parse_state, passthrough = false }).
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
 
 %% public API
 start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, [ServerConfig], []).
 
+start_passthrough(PID) -> gen_fsm:send_event(PID, enter_passthrough).
+end_passthrough(PID) -> gen_fsm:send_event(PID, exit_passthrough).
 set_credentials(PID, User, Password) -> gen_fsm:send_all_state_event(PID, [set_credentials, User, Password]).
 connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
@@ -71,14 +86,19 @@ init([#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pa
               },
     { ok, disconnected, State }.
 
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User } = State) ->
+disconnected(start_passthrough, State) ->
+    { next_state, disconnected, State#state{ passthrough = true } };
+disconnected(end_passthrough, State) ->
+    { next_state, disconnected, State#state{ passthrough = false } };
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = Passthrough } = State) ->
     {ok, Socket} = create_socket(Host, Port, TLS),
-    { next_state, state_on_connect(User), State#state { socket = Socket } };
+    { next_state, state_on_connect(User, Passthrough), State#state { socket = Socket } };
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
 
-state_on_connect(User) when is_list(User), length(User) > 0 -> authenticate;
-state_on_connect(_) -> idle.
+state_on_connect(User, false) when is_list(User), length(User) > 0 -> authenticate;
+state_on_connect(_User, true) -> passthrough;
+state_on_connect(_User, _Passthrough) -> idle.
 
 authenticate({ data, _Data }, #state{ user = User, pass = Pass, authed = false } = State) ->
     Message = <<"LOGIN ", User/binary, " ", Pass/binary>>,
@@ -102,6 +122,21 @@ authenticating({ data, Data }, #state{ authed = in_process } = State) ->
     end;
 authenticating(Command, State) when is_record(Command, command) ->
     { next_state, authenticating, enque_command(Command, State) }.
+
+passthrough(send, #state{ socket = Socket } = State) ->
+    %%TODO write to socket, read response, return to sender
+    { next_state, passthrough, State };
+passthrough({ data, Data }, State) ->
+    %%TODO: return Data to sender
+    { next_state, passthrough, State };
+passthrough(start_passthrough, State) ->
+    %% already in passthrough, but what the hell ...
+    lager:warning("Already in passthrough mode, and passthrough mode was requested again!"),
+    %% TODO: should this count the # of times start is called and require an equal # of ends?
+    { next_state, passthrough, State };
+passthrough(end_passthrough, State) ->
+    gen_fsm:send_event(self(), process_command_queue),
+    { next_state, idle, State }.
 
 idle(process_command_queue, #state{ command_queue = Queue } = State) ->
     case queue:out(Queue) of
