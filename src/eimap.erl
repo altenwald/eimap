@@ -71,11 +71,14 @@ init([#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pa
               },
     { ok, disconnected, State }.
 
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined } = State) ->
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User } = State) ->
     {ok, Socket} = create_socket(Host, Port, TLS),
-    { next_state, authenticate, State#state { socket = Socket } };
+    { next_state, state_on_connect(User), State#state { socket = Socket } };
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
+
+state_on_connect(User) when is_list(User), length(User) > 0 -> authenticate;
+state_on_connect(_) -> idle.
 
 authenticate({ data, _Data }, #state{ user = User, pass = Pass, authed = false } = State) ->
     Message = <<"LOGIN ", User/binary, " ", Pass/binary>>,
