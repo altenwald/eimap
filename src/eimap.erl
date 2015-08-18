@@ -148,7 +148,12 @@ handle_event(disconnect, _StateName, State) ->
     close_socket(State),
     { next_state, disconnected, reset_state(State) };
 handle_event([set_credentials, User, Pass], disconnected, State) ->
-    { next_state, State, State#state{ user = User, pass = Pass } };
+    { next_state, authenticate, State#state{ user = User, pass = Pass } };
+handle_event([set_credentials, User, Pass], idle, #state{ authed = Authed } = State) when Authed =:= false->
+    { next_state, authenticate, State#state{ user = User, pass = Pass } };
+handle_event([set_credentials, _User, _Pass], CurrentState, #state{ authed = Authed } = State) ->
+    lager:warning("Attempted to set user and password while connected but not ready: ~p ~p", [CurrentState, Authed]),
+    { next_state, CurrentState, State };
 handle_event({ ready_command, Command }, StateName, State) when is_record(Command, command) ->
     %%lager:info("Making command .. ~p", [Command]),
     ?MODULE:StateName(Command, State);
