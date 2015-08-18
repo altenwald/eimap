@@ -147,7 +147,7 @@ passthrough(start_passthrough, State) ->
     { next_state, passthrough, State };
 passthrough(end_passthrough, State) ->
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State }.
+    { next_state, idle, State#state{ passthrough = false } }.
 
 idle(process_command_queue, #state{ command_queue = Queue } = State) ->
     case queue:out(Queue) of
