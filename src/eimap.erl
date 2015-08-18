@@ -25,7 +25,7 @@
          %% responses passed back equally blindly. in this mode the user is on
          %% their own and better know what they are doing. can only be activated
          %% when disconnected or idle
-         start_passthrough/1, end_passthrough/1, passthrough/3,
+         start_passthrough/2, stop_passthrough/1, passthrough_data/2,
          %% mutators
          set_credentials/3,
          %% connection management
@@ -42,15 +42,16 @@
 %% state record definition
 -record(state, { host, port, tls, user, pass, authed = false, socket,
                  command_serial = 1, command_queue = queue:new(),
-                 current_command, current_mbox, parse_state, passthrough = false, passthrough_send_buffer = <<>> }).
+                 current_command, current_mbox, parse_state,
+                 passthrough = false, passthrough_recv, passthrough_send_buffer = <<>> }).
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
 
 %% public API
 start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, [ServerConfig], []).
 
-start_passthrough(PID) -> gen_fsm:send_event(PID, enter_passthrough).
-end_passthrough(PID) -> gen_fsm:send_event(PID, exit_passthrough).
-passthrough(PID, Receiver, Data) when is_pid(Receiver), is_binary(Data) -> gen_fsm:send_event(PID, { passthrough, Data }).
+start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_event(PID, { start_passthrough, Receiver } ).
+stop_passthrough(PID) -> gen_fsm:send_event(PID, stop_passthrough).
+passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_event(PID, { passthrough, Data }).
 set_credentials(PID, User, Password) -> gen_fsm:send_all_state_event(PID, [set_credentials, User, Password]).
 connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
@@ -87,9 +88,9 @@ init([#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pa
               },
     { ok, disconnected, State }.
 
-disconnected(start_passthrough, State) ->
-    { next_state, disconnected, State#state{ passthrough = true } };
-disconnected(end_passthrough, State) ->
+disconnected({ start_passthrough, Receiver }, State) ->
+    { next_state, disconnected, State#state{ passthrough = true, passthrough_recv = Receiver } };
+disconnected(stop_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = false } };
 disconnected({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     { next_state, disconnected, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
@@ -137,15 +138,15 @@ passthrough({ passthrough, Data }, #state{ socket = Socket, tls = true } = State
 passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
     gen_tcp:send(Data, Socket),
     { next_state, passthrough, State };
-passthrough({ data, Data }, State) ->
-    %%TODO: return Data to sender
+passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
+    Receiver ! { imap_server_response, Data },
     { next_state, passthrough, State };
-passthrough(start_passthrough, State) ->
-    %% already in passthrough, but what the hell ...
+passthrough({ start_passthrough, Receiver }, State) ->
+    %% already in passthrough, but perhaps the Receiver changes ...
     lager:warning("Already in passthrough mode, and passthrough mode was requested again!"),
     %% TODO: should this count the # of times start is called and require an equal # of ends?
-    { next_state, passthrough, State };
-passthrough(end_passthrough, State) ->
+    { next_state, passthrough, State#state{ passthrough_recv = Receiver } };
+passthrough(stop_passthrough, State) ->
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State#state{ passthrough = false } }.
 

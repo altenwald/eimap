@@ -52,14 +52,15 @@ Passthrough Mode
 ================
 eimap supports a mode of operation which simply passes data between the user
 and the imap server blindly. This is known as "passthrough" mode and can be
-started and stopped with the start_passthrough/1 and end_passthrough/1
+started and stopped with the start_passthrough/2 and stop_passthrough/1
 functions.
 
-Data is queued up for sending with the passthrough/3 function, and will be
+Data is queued up for sending with the passthrough_data/2 function, and will be
 sent to the server as soon as possible.
 
 Responses are similarly sent back to the initiator of the passthrough mode
-for dispatch in the form of { server_response, Data } messages.
+for dispatch in the form of { imap_server_response, Data } messages. The receiver
+is the PID passed to start_passthrough/2 as the second parameter.
 
 As the user is entirely responsible for the traffic and thereby the state
 of the IMAP conenction during passthrough, exercise all caution while using
