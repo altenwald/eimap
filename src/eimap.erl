@@ -79,7 +79,6 @@ get_path_tokens(PID, From, ResponseToken) ->
 
 %% gen_server API
 init(#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pass = Pass }) ->
-    lager:debug("BIiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiingo!!!!!!!!!!!"),
     State = #state {
                 host = Host,
                 port = Port,
