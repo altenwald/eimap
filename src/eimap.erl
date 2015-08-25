@@ -133,10 +133,10 @@ authenticating(Command, State) when is_record(Command, command) ->
 passthrough(flush_passthrough_buffer, #state{ passthrough_send_buffer = Buffer } = State) ->
     passthrough({ passthrough, Buffer }, State#state{ passthrough_send_buffer = <<>> });
 passthrough({ passthrough, Data }, #state{ socket = Socket, tls = true } = State) ->
-    ssl:send(Data, Socket),
+    ssl:send(Socket, Data),
     { next_state, passthrough, State };
 passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
-    gen_tcp:send(Data, Socket),
+    gen_tcp:send(Socket, Data),
     { next_state, passthrough, State };
 passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
     Receiver ! { imap_server_response, Data },
