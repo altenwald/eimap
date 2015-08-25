@@ -47,7 +47,7 @@
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
 
 %% public API
-start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, [ServerConfig], []).
+start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, ServerConfig, []).
 
 start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_event(PID, { start_passthrough, Receiver } ).
 stop_passthrough(PID) -> gen_fsm:send_event(PID, stop_passthrough).
@@ -78,7 +78,8 @@ get_path_tokens(PID, From, ResponseToken) ->
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 %% gen_server API
-init([#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pass = Pass }]) ->
+init(#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pass = Pass }) ->
+    lager:debug("BIiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiingo!!!!!!!!!!!"),
     State = #state {
                 host = Host,
                 port = Port,
