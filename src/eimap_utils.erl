@@ -18,6 +18,7 @@
 -module(eimap_utils).
 -export([
          extract_path_from_uri/3, extract_uidset_from_uri/1,
+         split_command_into_components/1,
          header_name/1,
          check_response_for_failure/2
         ]).
@@ -52,7 +53,21 @@ check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
     NoTokenLength = byte_size(NoToken),
     is_no_token_found(Data, Tag, binary:match(Data, NoToken, [ { scope, { 0, NoTokenLength } } ])).
 
+-spec split_command_into_components(Buffer :: binary()) -> { Tag :: binary(), Command :: binary(), Data :: binary() }.
+split_command_into_components(Buffer) when is_binary(Buffer) ->
+    split_command(Buffer).
+
 %% Private
+split_command(<<>>) -> { <<>>, <<>>, <<>> };
+split_command(Buffer) ->
+    { Tag, CommandStart } = searched_in_buffer(Buffer, 0, binary:match(Buffer, <<" ">>)),
+    { Command, DataStart } = searched_in_buffer(Buffer, CommandStart, binary:match(Buffer, <<" ">>, [ { scope, { CommandStart, size(Buffer) - CommandStart  } } ])),
+    Data = binary:part(Buffer, DataStart, size(Buffer) - (DataStart)),
+    { Tag, Command, Data }.
+
+searched_in_buffer(_Buffer, _Start, nomatch) -> { <<>>, 0 };
+searched_in_buffer(Buffer, Start, { MatchStart, MatchLength } ) -> { binary:part(Buffer, Start, MatchStart - Start), MatchStart + MatchLength }.
+
 is_no_token_found(Data, Tag, nomatch) ->
     BadToken = <<Tag/binary, " BAD">>,
     BadTokenLength = byte_size(BadToken),
