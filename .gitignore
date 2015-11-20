@@ -7,3 +7,4 @@ db
 log
 .*.swp
 Mnesia*
+.eunit
