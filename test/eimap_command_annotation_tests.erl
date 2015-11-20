@@ -15,10 +15,10 @@
 %% You should have received a copy of the GNU General Public License
 %% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
--module(erl_imap_command_annotation_tests).
+-module(eimap_command_annotation_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-% c("apps/egara/test/erl_imap_command_annotation_tests.erl"). eunit:test(erl_imap_command_annotation).
+% c("test/eimap_command_annotation_tests.erl"). eunit:test(eimap_command_annotation).
 
 parse_test_() ->
     Data =
@@ -55,7 +55,7 @@ parse_test_() ->
             }
         }
     ],
-    lists:foldl(fun({ Tag, ServerData, Expected }, Acc) -> [?_assertEqual(Expected, erl_imap_command_annotation:parse(ServerData, Tag))|Acc] end, [], Data).
+    lists:foldl(fun({ Tag, ServerData, Expected }, Acc) -> [?_assertEqual(Expected, eimap_command_annotation:parse(ServerData, Tag))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
@@ -63,5 +63,5 @@ new_test_() ->
         %% mailbox, command
         { <<"user/john.doe/Calendar/Personal Calendar@example.org">>, <<"GETANNOTATION \"user/john.doe/Calendar/Personal Calendar@example.org\" \"*\" \"value.shared\"">> }
     ],
-    lists:foldl(fun({ Mailbox, Command }, Acc) -> [?_assertEqual(Command, erl_imap_command_annotation:new(Mailbox))|Acc] end, [], Data).
+    lists:foldl(fun({ Mailbox, Command }, Acc) -> [?_assertEqual(Command, eimap_command_annotation:new(Mailbox))|Acc] end, [], Data).
 
