@@ -218,8 +218,8 @@ handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) 
     %%lager:info("Got us ~p", [Bin]),
     inet:setopts(Socket, [{ active, once }]),
     ?MODULE:StateName({ data, Bin }, State);
-handle_info({tcp_closed, Socket}, _StateName, #state{ socket = Socket, host = Host } = State) ->
-    lager:info("~p Client ~p disconnected.\n", [self(), Host]),
+handle_info({tcp_closed, Socket}, _StateName, #state{ socket = Socket, host = Host, port = Port, user = User } = State) ->
+    lager:info("~p Client disconnected from ~p@~p:~p .\n", [self(), User, Host, Port]),
     { stop, normal, State };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
