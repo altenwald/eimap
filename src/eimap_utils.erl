@@ -60,13 +60,17 @@ split_command_into_components(Buffer) when is_binary(Buffer) ->
 %% Private
 split_command(<<>>) -> { <<>>, <<>>, <<>> };
 split_command(Buffer) ->
-    { Tag, CommandStart } = searched_in_buffer(Buffer, 0, binary:match(Buffer, <<" ">>)),
-    { Command, DataStart } = searched_in_buffer(Buffer, CommandStart, binary:match(Buffer, <<" ">>, [ { scope, { CommandStart, size(Buffer) - CommandStart  } } ])),
-    Data = binary:part(Buffer, DataStart, size(Buffer) - (DataStart)),
+    End = eol_found(Buffer, binary:match(Buffer, <<"\r\n">>)),
+    { Tag, CommandStart } = searched_in_buffer(Buffer, 0, End, binary:match(Buffer, <<" ">>, [ { scope, { 0, End } } ])),
+    { Command, DataStart } = searched_in_buffer(Buffer, CommandStart, End, binary:match(Buffer, <<" ">>, [ { scope, { CommandStart, End - CommandStart  } } ])),
+    Data = binary:part(Buffer, DataStart, End - (DataStart)),
     { Tag, Command, Data }.
 
-searched_in_buffer(Buffer, Start, nomatch) -> { binary:part(Buffer, Start, size(Buffer) - Start), size(Buffer) };
-searched_in_buffer(Buffer, Start, { MatchStart, MatchLength } ) -> { binary:part(Buffer, Start, MatchStart - Start), MatchStart + MatchLength }.
+eol_found(Buffer, nomatch) -> size(Buffer);
+eol_found(_Buffer, { MatchStart, _MatchLength }) -> MatchStart.
+
+searched_in_buffer(Buffer, Start, End, nomatch) -> { binary:part(Buffer, Start, End - Start), End };
+searched_in_buffer(Buffer, Start, End, { MatchStart, MatchLength } ) -> { binary:part(Buffer, Start, MatchStart - Start), MatchStart + MatchLength }.
 
 is_no_token_found(Data, Tag, nomatch) ->
     BadToken = <<Tag/binary, " BAD">>,
