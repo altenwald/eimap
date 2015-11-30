@@ -65,7 +65,7 @@ split_command(Buffer) ->
     Data = binary:part(Buffer, DataStart, size(Buffer) - (DataStart)),
     { Tag, Command, Data }.
 
-searched_in_buffer(_Buffer, _Start, nomatch) -> { <<>>, 0 };
+searched_in_buffer(Buffer, Start, nomatch) -> { binary:part(Buffer, Start, size(Buffer) - Start), size(Buffer) };
 searched_in_buffer(Buffer, Start, { MatchStart, MatchLength } ) -> { binary:part(Buffer, Start, MatchStart - Start), MatchStart + MatchLength }.
 
 is_no_token_found(Data, Tag, nomatch) ->

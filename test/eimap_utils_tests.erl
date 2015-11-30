@@ -49,6 +49,7 @@ extract_uid_from_uri_test_() ->
 split_command_into_components_test_() ->
     Data =
     [
+        { { <<"1">>, <<"STARTTLS">>, <<>> }, <<"1 STARTTLS">> },
         { { <<"3">>, <<"ID">>, <<"(\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }, <<"3 ID (\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }
     ],
     lists:foldl(fun({ Val, Input }, Acc) -> [?_assert(Val == eimap_utils:split_command_into_components(Input)) | Acc] end,
