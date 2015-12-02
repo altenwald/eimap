@@ -8,6 +8,6 @@
 
 -callback new(Args :: any()) -> binary().
 -callback parse(Data :: binary(), Tag :: binary()) ->
-    more_tuple() | finished_tuple() | error_tuple().
+    more_tuple() | finished_tuple() | error_tuple() | starttls.
 
 

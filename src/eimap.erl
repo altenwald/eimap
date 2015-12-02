@@ -31,6 +31,7 @@
          %% connection management
          connect/1, disconnect/1,
          %% commands
+         starttls/3,
          get_folder_annotations/4,
          get_message_headers_and_body/5,
          get_path_tokens/3]).
@@ -40,7 +41,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% state record definition
--record(state, { host, port, tls, user, pass, authed = false, socket,
+-record(state, { host, port, tls, tls_state = false, user, pass, authed = false, socket,
                  command_serial = 1, command_queue = queue:new(),
                  current_command, current_mbox, parse_state,
                  passthrough = false, passthrough_recv, passthrough_send_buffer = <<>> }).
@@ -55,6 +56,12 @@ passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_event(PID, { pa
 set_credentials(PID, User, Password) -> gen_fsm:send_all_state_event(PID, [set_credentials, User, Password]).
 connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
+
+starttls(PID, From, ResponseToken) when is_pid(PID) ->
+    Command = #command{ message = eimap_command_starttls:new(ok),
+                        from = From, response_token = ResponseToken,
+                        parse_fun = fun eimap_command_starttls:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 get_folder_annotations(PID, From, ResponseToken, Folder) when is_list(Folder) ->
     get_folder_annotations(PID, From, ResponseToken, list_to_binary(Folder));
@@ -94,15 +101,18 @@ disconnected(stop_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = false } };
 disconnected({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     { next_state, disconnected, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = false} = State) ->
-    {ok, Socket} = create_socket(Host, Port, TLS),
-    { next_state, state_on_connect(User), State#state { socket = Socket } };
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, passthrough = true } = State) ->
-    {ok, Socket} = create_socket(Host, Port, TLS),
-    gen_fsm:send_event(self(), flush_passthrough_buffer),
-    { next_state, passthrough, State#state { socket = Socket } };
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = Passthrough} = State) ->
+    { ok, Socket } = create_socket(Host, Port, TLS),
+    case Passthrough of
+        true -> gen_fsm:send_event(self(), flush_passthrough_buffer);
+        _ -> ok
+    end,
+    { next_state, state_on_connect(User), State#state { socket = Socket, tls_state = start_state_for_tlspolicy(TLS) } };
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
+
+start_state_for_tlspolicy(true) -> true;
+start_state_for_tlspolicy(_) -> false.
 
 state_on_connect(User) when is_list(User), length(User) > 0 -> authenticate;
 state_on_connect(_User) -> idle.
@@ -132,7 +142,7 @@ authenticating(Command, State) when is_record(Command, command) ->
 
 passthrough(flush_passthrough_buffer, #state{ passthrough_send_buffer = Buffer } = State) ->
     passthrough({ passthrough, Buffer }, State#state{ passthrough_send_buffer = <<>> });
-passthrough({ passthrough, Data }, #state{ socket = Socket, tls = true } = State) ->
+passthrough({ passthrough, Data }, #state{ socket = Socket, tls_state = true } = State) ->
     ssl:send(Socket, Data),
     { next_state, passthrough, State };
 passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
@@ -257,7 +267,11 @@ next_command_after_response({ error, _ } = ErrorResponse, State) ->
 next_command_after_response({ fini, Response }, State) ->
     notify_of_response(Response, State#state.current_command),
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ parse_state = none } }.
+    { next_state, idle, State#state{ parse_state = none } };
+next_command_after_response(starttls, State) ->
+    { TLSState, Socket } = upgrade_socket(State),
+    gen_fsm:send_event(self(), process_command_queue),
+    { next_state, idle, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } }.
 
 tag_field_width(Serial) when Serial < 10000 -> 4;
 tag_field_width(Serial) -> tag_field_width(Serial / 10000, 5).
@@ -265,11 +279,28 @@ tag_field_width(Serial, Count) when Serial < 10 -> Count;
 tag_field_width(Serial, Count) -> tag_field_width(Serial / 10, Count + 1).
 
 create_socket(Host, Port, true) -> ssl:connect(Host, Port, socket_options(), 1000);
+create_socket(Host, Port, starttls) ->
+    Return = gen_tcp:connect(Host, Port, socket_options(), 1000),
+    starttls(self(), self(), undefined),
+    Return;
 create_socket(Host, Port, _) -> gen_tcp:connect(Host, Port, socket_options(), 1000).
 socket_options() -> [binary, { active, once }, { send_timeout, 5000 }].
 
-close_socket(#state{ socket = undefined }) -> ok;
-close_socket(#state{ socket = Socket, tls = true }) -> ssl:close(Socket);
+upgrade_socket(#state{ socket = Socket, tls_state = true, current_command = Command }) ->
+    notify_of_response(starttls_complete, Command),
+    { true, Socket };
+upgrade_socket(#state{ socket = Socket, current_command = Command }) ->
+    case ssl:connect(Socket) of
+        {ok, SSLSocket} ->
+            notify_of_response(starttls_complete, Command),
+            { starttls, SSLSocket };
+        _ ->
+            notify_of_response(starttls_failed, Command),
+            { false, Socket }
+    end.
+
+close_socket(#state{ socket = undefined }) -> false;
+close_socket(#state{ socket = Socket, tls_state = true }) -> ssl:close(Socket);
 close_socket(#state{ socket = Socket }) -> gen_tcp:close(Socket).
 
 reset_state(State) -> State#state{ socket = undefined, authed = false, command_serial = 1 }.
@@ -280,7 +311,7 @@ reset_state(State) -> State#state{ socket = undefined, authed = false, command_s
 send_command(Command, #state{ socket = undefined } = State) ->
     lager:warning("Not connected, dropping command on floor: ~s", [Command]),
     State;
-send_command(Command, #state{ tls = true} = State) ->
+send_command(Command, #state{ tls_state = true} = State) ->
     send_command(fun ssl:send/2, Command, State);
 send_command(Command, State) ->
     send_command(fun gen_tcp:send/2, Command, State).
