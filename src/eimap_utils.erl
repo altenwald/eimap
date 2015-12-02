@@ -70,7 +70,7 @@ eol_found(Buffer, nomatch) -> size(Buffer);
 eol_found(_Buffer, { MatchStart, _MatchLength }) -> MatchStart.
 
 searched_in_buffer(Buffer, Start, End, nomatch) -> { binary:part(Buffer, Start, End - Start), End };
-searched_in_buffer(Buffer, Start, End, { MatchStart, MatchLength } ) -> { binary:part(Buffer, Start, MatchStart - Start), MatchStart + MatchLength }.
+searched_in_buffer(Buffer, Start, _End, { MatchStart, MatchLength } ) -> { binary:part(Buffer, Start, MatchStart - Start), MatchStart + MatchLength }.
 
 is_no_token_found(Data, Tag, nomatch) ->
     BadToken = <<Tag/binary, " BAD">>,
