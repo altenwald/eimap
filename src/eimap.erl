@@ -37,7 +37,7 @@
          get_path_tokens/3]).
 
 %% gen_fsm callbacks
--export([disconnected/2, authenticate/2, authenticating/2, idle/2, passthrough/2, wait_response/2]).
+-export([disconnected/2, authenticate/2, authenticating/2, idle/2, passthrough/2, wait_response/2, startingtls/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% state record definition
@@ -46,6 +46,9 @@
                  current_command, current_mbox, parse_state,
                  passthrough = false, passthrough_recv, passthrough_send_buffer = <<>> }).
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
+
+-define(SSL_UPGRADE_TIMEOUT, 2000).
+-define(TCP_CONNECT_TIMEOUT, 2000).
 
 %% public API
 start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, ServerConfig, []).
@@ -101,21 +104,33 @@ disconnected(stop_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = false } };
 disconnected({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     { next_state, disconnected, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = Passthrough} = State) ->
-    { ok, Socket } = create_socket(Host, Port, TLS),
-    case Passthrough of
-        true -> gen_fsm:send_event(self(), flush_passthrough_buffer);
-        _ -> ok
-    end,
-    { next_state, state_on_connect(User), State#state { socket = Socket, tls_state = start_state_for_tlspolicy(TLS) } };
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = false} = State) ->
+    { {ok, Socket}, TlsState } = create_socket(Host, Port, TLS),
+    { next_state, next_state_after_connect(TLS, User), State#state { socket = Socket, tls_state = TlsState } };
+disconnected(connect, #state{ host = Host, port = Port, tls = starttls, socket = undefined, passthrough = true } = State) ->
+    { {ok, Socket}, TlsState } = create_socket(Host, Port, starttls),
+    %gen_fsm:send_event(self(), flush_passthrough_buffer), unlike the other cases, we hold off on starting passthrough until starttls is done
+    { next_state, idle, State#state { socket = Socket, tls_state = TlsState } };
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, passthrough = true } = State) ->
+    { {ok, Socket}, TlsState } = create_socket(Host, Port, TLS),
+    gen_fsm:send_event(self(), flush_passthrough_buffer),
+    { next_state, passthrough, State#state { socket = Socket, tls_state = TlsState } };
+
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
 
-start_state_for_tlspolicy(true) -> true;
-start_state_for_tlspolicy(_) -> false.
+next_state_after_connect(starttls, _User) -> startingtls;
+next_state_after_connect(_TLS, User) when is_list(User), length(User) > 0 -> authenticate;
+next_state_after_connect(_TLS, _User) -> idle.
 
-state_on_connect(User) when is_list(User), length(User) > 0 -> authenticate;
-state_on_connect(_User) -> idle.
+next_state_after_starttls(true, _User, _Authed) ->
+    gen_fsm:send_event(self(), flush_passthrough_buffer),
+    passthrough;
+next_state_after_starttls(_Passthrough, User, false) when is_list(User), length(User) > 0 ->
+    authenticate;
+next_state_after_starttls(_Passthrough, _User, _Authed) ->
+    gen_fsm:send_event(self(), process_command_queue),
+    idle.
 
 authenticate({ data, _Data }, #state{ user = User, pass = Pass, authed = false } = State) ->
     Message = <<"LOGIN ", User/binary, " ", Pass/binary>>,
@@ -141,11 +156,14 @@ authenticating(Command, State) when is_record(Command, command) ->
     { next_state, authenticating, enque_command(Command, State) }.
 
 passthrough(flush_passthrough_buffer, #state{ passthrough_send_buffer = Buffer } = State) ->
+    %lager:info("Passing through ~p", [Buffer]),
     passthrough({ passthrough, Buffer }, State#state{ passthrough_send_buffer = <<>> });
 passthrough({ passthrough, Data }, #state{ socket = Socket, tls_state = true } = State) ->
+    %lager:info("Passing through ssl"),
     ssl:send(Socket, Data),
     { next_state, passthrough, State };
 passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
+    %lager:info("Passing through tcp"),
     gen_tcp:send(Socket, Data),
     { next_state, passthrough, State };
 passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
@@ -192,6 +210,15 @@ wait_response({ data, Data }, #state{ current_command = #command{ parse_fun = Fu
     next_command_after_response(Response, State);
 wait_response({ data, Data }, #state{ parse_state = ParseState, current_command = #command{ parse_fun = Fun, tag = Tag } } = State) when is_function(Fun, 3) ->
     Response = Fun(Data, Tag, ParseState),
+    %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
+    next_command_after_response(Response, State).
+
+startingtls({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
+    { next_state, startingtls, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
+startingtls(Command, State) when is_record(Command, command) ->
+    { next_state, startingtls, enque_command(Command, State) };
+startingtls({ data, Data }, #state{ current_command = #command{ parse_fun = Fun, tag = Tag } } = State) when is_function(Fun, 2) ->
+    Response = Fun(Data, Tag),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
     next_command_after_response(Response, State).
 
@@ -271,34 +298,44 @@ next_command_after_response({ fini, Response }, State) ->
     notify_of_response(Response, State#state.current_command),
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State#state{ parse_state = none } };
-next_command_after_response(starttls, State) ->
+next_command_after_response(starttls, #state{ passthrough = Passthrough, user = User, authed = Authed } = State) ->
     { TLSState, Socket } = upgrade_socket(State),
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } }.
+    %lager:info("~p Upgraded the socket ...", [self()]),
+    NextState = next_state_after_starttls(Passthrough, User, Authed),
+    %lager:info("!!!!!!!!!! our next state is ~p", [NextState]),
+    { next_state, NextState, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } }.
 
 tag_field_width(Serial) when Serial < 10000 -> 4;
 tag_field_width(Serial) -> tag_field_width(Serial / 10000, 5).
 tag_field_width(Serial, Count) when Serial < 10 -> Count;
 tag_field_width(Serial, Count) -> tag_field_width(Serial / 10, Count + 1).
 
-create_socket(Host, Port, true) -> ssl:connect(Host, Port, socket_options(), 1000);
+create_socket(Host, Port, true) -> { ssl:connect(Host, Port, socket_options(), ?SSL_UPGRADE_TIMEOUT), true };
 create_socket(Host, Port, starttls) ->
-    Return = gen_tcp:connect(Host, Port, socket_options(), 1000),
+    Return = gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT),
     starttls(self(), self(), undefined),
-    Return;
-create_socket(Host, Port, _) -> gen_tcp:connect(Host, Port, socket_options(), 1000).
+    { Return, false };
+create_socket(Host, Port, _) -> { gen_tcp:connect(Host, Port, socket_options(), 1000), false }.
+
 socket_options() -> [binary, { active, once }, { send_timeout, 5000 }].
 
 upgrade_socket(#state{ socket = Socket, tls_state = true, current_command = Command }) ->
     notify_of_response(starttls_complete, Command),
+    ssl:setopts(Socket, [{ active, once }]),
     { true, Socket };
 upgrade_socket(#state{ socket = Socket, current_command = Command }) ->
-    case ssl:connect(Socket) of
-        {ok, SSLSocket} ->
+    %lager:info("~p upgrading the server socket due to starttls ******************************************************", [self()]),
+    inet:setopts(Socket, [{ active, false }]),
+    case ssl:connect(Socket, socket_options(), ?SSL_UPGRADE_TIMEOUT) of
+        { ok, SSLSocket } ->
+            %lager:info("~p it worked", [self()]),
             notify_of_response(starttls_complete, Command),
-            { starttls, SSLSocket };
-        _ ->
+            ssl:setopts(SSLSocket, [{ active, once }]),
+            { true, SSLSocket };
+        { error, Reason } ->
+            lager:warn("~p StartTLS failed due to: ~p", [self(), Reason]),
             notify_of_response(starttls_failed, Command),
+            inet:setopts(Socket, [{ active, once }]),
             { false, Socket }
     end.
 
