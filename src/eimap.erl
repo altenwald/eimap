@@ -231,6 +231,9 @@ handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) 
 handle_info({tcp_closed, Socket}, _StateName, #state{ socket = Socket, host = Host, port = Port, user = User } = State) ->
     lager:info("~p Client disconnected from ~p@~p:~p .\n", [self(), User, Host, Port]),
     { stop, normal, State };
+handle_info({tcp_error, Socket, _Reason}, _StateName, #state{ socket = Socket, host = Host, port = Port, user = User } = State) ->
+    lager:info("~p Client disconnected due to socket error from ~p@~p:~p .\n", [self(), User, Host, Port]),
+    { stop, normal, State };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
     { next_state, StateName, State#state{ current_mbox = MBox } };
