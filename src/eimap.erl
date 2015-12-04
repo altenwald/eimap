@@ -303,7 +303,7 @@ upgrade_socket(#state{ socket = Socket, current_command = Command }) ->
             ssl:setopts(SSLSocket, [{ active, once }]),
             { true, SSLSocket };
         { error, Reason } ->
-            lager:warn("~p StartTLS failed due to: ~p", [self(), Reason]),
+            lager:warning("~p StartTLS failed due to: ~p", [self(), Reason]),
             notify_of_response(starttls_failed, Command),
             inet:setopts(Socket, [{ active, once }]),
             { false, Socket }
