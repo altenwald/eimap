@@ -20,7 +20,8 @@
          extract_path_from_uri/3, extract_uidset_from_uri/1,
          split_command_into_components/1,
          header_name/1,
-         check_response_for_failure/2
+         check_response_for_failure/2,
+         ensure_binary/1
         ]).
 
 %% Translate the folder name in to a fully qualified folder path such as it
@@ -115,4 +116,9 @@ imap_folder_path(SharedPrefix, HierarchyDelim, { ok, {_Scheme, User, Domain, _Po
 
 split_imap_uri_domain([ ImapHost ]) -> { ImapHost, ImapHost };
 split_imap_uri_domain([ VDomain, ImapHost ]) -> { VDomain, ImapHost }.
+
+ensure_binary(Arg) when is_list(Arg) -> list_to_binary(Arg);
+ensure_binary(Arg) when is_binary(Arg) -> Arg;
+ensure_binary(_Arg) -> <<>>.
+
 
