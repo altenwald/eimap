@@ -26,22 +26,21 @@
          %% their own and better know what they are doing. can only be activated
          %% when disconnected or idle
          start_passthrough/2, stop_passthrough/1, passthrough_data/2,
-         %% mutators
-         set_credentials/3,
          %% connection management
          connect/1, disconnect/1,
          %% commands
          starttls/3,
+         login/5,
          get_folder_annotations/4,
          get_message_headers_and_body/5,
          get_path_tokens/3]).
 
 %% gen_fsm callbacks
--export([disconnected/2, authenticate/2, authenticating/2, idle/2, passthrough/2, wait_response/2, startingtls/2]).
+-export([disconnected/2, idle/2, passthrough/2, wait_response/2, startingtls/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% state record definition
--record(state, { host, port, tls, tls_state = false, user, pass, authed = false, socket,
+-record(state, { host, port, tls, tls_state = false, socket,
                  command_serial = 1, command_queue = queue:new(),
                  current_command, current_mbox, parse_state,
                  passthrough = false, passthrough_recv, passthrough_send_buffer = <<>> }).
@@ -56,7 +55,6 @@ start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> ge
 start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_event(PID, { start_passthrough, Receiver } ).
 stop_passthrough(PID) -> gen_fsm:send_event(PID, stop_passthrough).
 passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_event(PID, { passthrough, Data }).
-set_credentials(PID, User, Password) -> gen_fsm:send_all_state_event(PID, [set_credentials, User, Password]).
 connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
 
@@ -64,6 +62,12 @@ starttls(PID, From, ResponseToken) when is_pid(PID) ->
     Command = #command{ message = eimap_command_starttls:new(ok),
                         from = From, response_token = ResponseToken,
                         parse_fun = fun eimap_command_starttls:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+
+login(PID, From, ResponseToken, User, Pass) ->
+    Command = #command{ message = eimap_command_login:new({ User, Pass }),
+                        from = From, response_token = ResponseToken,
+                        parse_fun = fun eimap_command_login:parse/2 },
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 get_folder_annotations(PID, From, ResponseToken, Folder) when is_list(Folder) ->
@@ -88,13 +92,11 @@ get_path_tokens(PID, From, ResponseToken) ->
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 %% gen_server API
-init(#eimap_server_config{ host = Host, port = Port, tls = TLS, user = User, pass = Pass }) ->
+init(#eimap_server_config{ host = Host, port = Port, tls = TLS }) ->
     State = #state {
                 host = Host,
                 port = Port,
-                tls  = TLS,
-                user = ensure_binary(User),
-                pass = ensure_binary(Pass)
+                tls  = TLS
               },
     { ok, disconnected, State }.
 
@@ -104,9 +106,9 @@ disconnected(stop_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = false } };
 disconnected({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     { next_state, disconnected, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, user = User, passthrough = false} = State) ->
+disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, passthrough = false} = State) ->
     { {ok, Socket}, TlsState } = create_socket(Host, Port, TLS),
-    { next_state, next_state_after_connect(TLS, User), State#state { socket = Socket, tls_state = TlsState } };
+    { next_state, next_state_after_connect(TLS), State#state { socket = Socket, tls_state = TlsState } };
 disconnected(connect, #state{ host = Host, port = Port, tls = starttls, socket = undefined, passthrough = true } = State) ->
     { {ok, Socket}, TlsState } = create_socket(Host, Port, starttls),
     %gen_fsm:send_event(self(), flush_passthrough_buffer), unlike the other cases, we hold off on starting passthrough until starttls is done
@@ -119,41 +121,15 @@ disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = unde
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
 
-next_state_after_connect(starttls, _User) -> startingtls;
-next_state_after_connect(_TLS, User) when is_list(User), length(User) > 0 -> authenticate;
-next_state_after_connect(_TLS, _User) -> idle.
+next_state_after_connect(starttls) -> startingtls;
+next_state_after_connect(_TLS) -> idle.
 
-next_state_after_starttls(true, _User, _Authed) ->
+next_state_after_starttls(true) ->
     gen_fsm:send_event(self(), flush_passthrough_buffer),
     passthrough;
-next_state_after_starttls(_Passthrough, User, false) when is_list(User), length(User) > 0 ->
-    authenticate;
-next_state_after_starttls(_Passthrough, _User, _Authed) ->
+next_state_after_starttls(_Passthrough) ->
     gen_fsm:send_event(self(), process_command_queue),
     idle.
-
-authenticate({ data, _Data }, #state{ user = User, pass = Pass, authed = false } = State) ->
-    Message = <<"LOGIN ", User/binary, " ", Pass/binary>>,
-    Command = #command{ message = Message },
-    send_command(Command, State),
-    { next_state, authenticating, State#state{ authed = in_process } };
-authenticate(Command, State) when is_record(Command, command) ->
-    { next_state, authenticate, enque_command(Command, State) }.
-
-authenticating({ data, Data }, #state{ authed = in_process } = State) ->
-    Token = <<" OK ">>, %TODO would be nice to have the tag there
-    case binary:match(Data, Token) of
-        nomatch ->
-            lager:warning("Log in to IMAP server failed: ~p", [Data]),
-            close_socket(State),
-            { next_state, idle, State#state{ socket = undefined, authed = false } };
-        _ ->
-            %%lager:info("Logged in to IMAP server successfully"),
-            gen_fsm:send_event(self(), process_command_queue),
-            { next_state, idle, State#state{ authed = true } }
-    end;
-authenticating(Command, State) when is_record(Command, command) ->
-    { next_state, authenticating, enque_command(Command, State) }.
 
 passthrough(flush_passthrough_buffer, #state{ passthrough_send_buffer = Buffer } = State) ->
     %lager:info("Passing through ~p", [Buffer]),
@@ -183,6 +159,7 @@ idle(process_command_queue, #state{ command_queue = Queue } = State) ->
        { { value, Command }, ModifiedQueue } when is_record(Command, command) ->
             %%lager:info("Clearing queue of ~p", [Command]),
             StateWithNewQueue = State#state{ command_queue = ModifiedQueue },
+            lager:info("Going to send ~s", [Command]),
             NewState = send_command(Command, StateWithNewQueue),
             { next_state, wait_response, NewState };
        { empty, ModifiedQueue } ->
@@ -231,13 +208,6 @@ handle_event(connect, _Statename, State) ->
 handle_event(disconnect, _StateName, State) ->
     close_socket(State),
     { next_state, disconnected, reset_state(State) };
-handle_event([set_credentials, User, Pass], disconnected, State) ->
-    { next_state, authenticate, State#state{ user = User, pass = Pass } };
-handle_event([set_credentials, User, Pass], idle, #state{ authed = Authed } = State) when Authed =:= false->
-    { next_state, authenticate, State#state{ user = User, pass = Pass } };
-handle_event([set_credentials, _User, _Pass], CurrentState, #state{ authed = Authed } = State) ->
-    lager:warning("Attempted to set user and password while connected but not ready: ~p ~p", [CurrentState, Authed]),
-    { next_state, CurrentState, State };
 handle_event({ ready_command, Command }, StateName, State) when is_record(Command, command) ->
     %%lager:info("Making command .. ~p", [Command]),
     ?MODULE:StateName(Command, State);
@@ -255,11 +225,11 @@ handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) 
     %%lager:info("Got us ~p", [Bin]),
     inet:setopts(Socket, [{ active, once }]),
     ?MODULE:StateName({ data, Bin }, State);
-handle_info({tcp_closed, Socket}, _StateName, #state{ socket = Socket, host = Host, port = Port, user = User } = State) ->
-    lager:info("~p Client disconnected from ~p@~p:~p .\n", [self(), User, Host, Port]),
+handle_info({tcp_closed, Socket}, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
+    lager:info("~p Client disconnected from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
-handle_info({tcp_error, Socket, _Reason}, _StateName, #state{ socket = Socket, host = Host, port = Port, user = User } = State) ->
-    lager:info("~p Client disconnected due to socket error from ~p@~p:~p .\n", [self(), User, Host, Port]),
+handle_info({tcp_error, Socket, _Reason}, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
+    lager:info("~p Client disconnected due to socket error from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
@@ -298,10 +268,10 @@ next_command_after_response({ fini, Response }, State) ->
     notify_of_response(Response, State#state.current_command),
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State#state{ parse_state = none } };
-next_command_after_response(starttls, #state{ passthrough = Passthrough, user = User, authed = Authed } = State) ->
+next_command_after_response(starttls, #state{ passthrough = Passthrough } = State) ->
     { TLSState, Socket } = upgrade_socket(State),
     %lager:info("~p Upgraded the socket ...", [self()]),
-    NextState = next_state_after_starttls(Passthrough, User, Authed),
+    NextState = next_state_after_starttls(Passthrough),
     %lager:info("!!!!!!!!!! our next state is ~p", [NextState]),
     { next_state, NextState, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } }.
 
@@ -343,7 +313,7 @@ close_socket(#state{ socket = undefined }) -> false;
 close_socket(#state{ socket = Socket, tls_state = true }) -> ssl:close(Socket);
 close_socket(#state{ socket = Socket }) -> gen_tcp:close(Socket).
 
-reset_state(State) -> State#state{ socket = undefined, authed = false, command_serial = 1 }.
+reset_state(State) -> State#state{ socket = undefined, command_serial = 1 }.
 
 %% sending command code paths:
 %%  0. not connected, TLS/SSL, unencrypted
@@ -387,8 +357,4 @@ enque_command(Command, State) ->
 reenque_command(Command, State) ->
     %%lager:info("Re-queueing command ~p", [Command]),
     State#state { command_queue = queue:in_r(Command, State#state.command_queue) }.
-
-ensure_binary(Arg) when is_list(Arg) -> list_to_binary(Arg);
-ensure_binary(Arg) when is_binary(Arg) -> Arg;
-ensure_binary(_Arg) -> <<>>.
 
