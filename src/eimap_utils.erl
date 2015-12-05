@@ -49,6 +49,8 @@ header_name(groupware_type) -> <<"X-Kolab-Type">>;
 header_name(groupware_uid) -> <<"Subject">>;
 header_name(_) -> unknown.
 
+check_response_for_failure(Data, undefined) when is_binary(Data) ->
+    check_response_for_failure(Data, <<>>);
 check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
     NoToken = <<Tag/binary, " NO">>,
     NoTokenLength = byte_size(NoToken),
