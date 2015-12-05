@@ -213,12 +213,12 @@ handle_sync_event(_Event, _From, StateName, State) -> { next_state, StateName, S
 
 handle_info({ ssl, Socket, Bin }, StateName, #state{ socket = Socket } = State) ->
     % Flow control: enable forwarding of next TCP message
-    lager:info("Received from server over ssl: ~s", [Bin]),
+    % lager:info("Received from server over ssl: ~s", [Bin]),
     ssl:setopts(Socket, [{ active, once }]),
     ?MODULE:StateName({ data, Bin }, State);
 handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) ->
     % Flow control: enable forwarding of next TCP message
-    lager:info("Received from server plaintext: ~s", [Bin]),
+    % lager:info("Received from server plaintext: ~s", [Bin]),
     inet:setopts(Socket, [{ active, once }]),
     ?MODULE:StateName({ data, Bin }, State);
 handle_info({ ssl_closed, Socket }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
