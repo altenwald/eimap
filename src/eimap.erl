@@ -27,9 +27,10 @@
          %% when disconnected or idle
          start_passthrough/2, stop_passthrough/1, passthrough_data/2,
          %% connection management
-         connect/1, disconnect/1,
+         connect/1, connect/3, disconnect/1,
          %% commands
          starttls/3,
+         capabilities/3,
          login/5,
          get_folder_annotations/4,
          get_message_headers_and_body/5,
@@ -55,13 +56,20 @@ start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> ge
 start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_event(PID, { start_passthrough, Receiver } ).
 stop_passthrough(PID) -> gen_fsm:send_event(PID, stop_passthrough).
 passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_event(PID, { passthrough, Data }).
-connect(PID) -> gen_fsm:send_all_state_event(PID, connect).
+connect(PID) -> connect(PID, undefined, undefined).
+connect(PID, From, ResponseToken) -> gen_fsm:send_all_state_event(PID, { connect, From, ResponseToken }).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
 
 starttls(PID, From, ResponseToken) when is_pid(PID) ->
     Command = #command{ message = eimap_command_starttls:new(ok),
                         from = From, response_token = ResponseToken,
                         parse_fun = fun eimap_command_starttls:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+
+capabilities(PID, From, ResponseToken) when is_pid(PID) ->
+    Command = #command{ message = eimap_command_capability:new(noparams),
+                        from = From, response_token = ResponseToken,
+                        parse_fun = fun eimap_command_capability:parse/2 },
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 login(PID, From, ResponseToken, User, Pass) ->
@@ -93,11 +101,7 @@ get_path_tokens(PID, From, ResponseToken) ->
 
 %% gen_server API
 init(#eimap_server_config{ host = Host, port = Port, tls = TLS }) ->
-    State = #state {
-                host = Host,
-                port = Port,
-                tls  = TLS
-              },
+    State = #state { host = Host, port = Port, tls  = TLS },
     { ok, disconnected, State }.
 
 disconnected({ start_passthrough, Receiver }, State) ->
@@ -106,40 +110,25 @@ disconnected(stop_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = false } };
 disconnected({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     { next_state, disconnected, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, passthrough = false} = State) ->
-    { {ok, Socket}, TlsState } = create_socket(Host, Port, TLS),
-    { next_state, next_state_after_connect(TLS), State#state { socket = Socket, tls_state = TlsState } };
-disconnected(connect, #state{ host = Host, port = Port, tls = starttls, socket = undefined, passthrough = true } = State) ->
-    { {ok, Socket}, TlsState } = create_socket(Host, Port, starttls),
-    %gen_fsm:send_event(self(), flush_passthrough_buffer), unlike the other cases, we hold off on starting passthrough until starttls is done
-    { next_state, idle, State#state { socket = Socket, tls_state = TlsState } };
-disconnected(connect, #state{ host = Host, port = Port, tls = TLS, socket = undefined, passthrough = true } = State) ->
-    { {ok, Socket}, TlsState } = create_socket(Host, Port, TLS),
-    gen_fsm:send_event(self(), flush_passthrough_buffer),
-    { next_state, passthrough, State#state { socket = Socket, tls_state = TlsState } };
-
+disconnected({ connect, Receiver, ResponseToken }, #state{ command_queue = CommandQueue, host = Host, port = Port, tls = TLS, socket = undefined } = State) ->
+    %lager:debug("CONNECTING! ~p ~p", [Receiver, ResponseToken]),
+    { {ok, Socket}, TlsState, SendCapabilitiesTo, NewCommandQueue } = create_socket(Host, Port, TLS, Receiver, ResponseToken, CommandQueue),
+    Command = #command{ message = eimap_command_capability:new([]),
+                        from = SendCapabilitiesTo, response_token = { connected, Receiver, ResponseToken },
+                        parse_fun = fun eimap_command_capability:parse/2 },
+    { next_state, wait_response, State#state { socket = Socket, tls_state = TlsState, current_command = Command, command_queue = NewCommandQueue } };
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
 
-next_state_after_connect(starttls) -> startingtls;
-next_state_after_connect(_TLS) -> idle.
-
-next_state_after_starttls(true) ->
-    gen_fsm:send_event(self(), flush_passthrough_buffer),
-    passthrough;
-next_state_after_starttls(_Passthrough) ->
-    gen_fsm:send_event(self(), process_command_queue),
-    idle.
-
 passthrough(flush_passthrough_buffer, #state{ passthrough_send_buffer = Buffer } = State) ->
-    %lager:info("Passing through ~p", [Buffer]),
+    lager:info("Passing through ~p", [Buffer]),
     passthrough({ passthrough, Buffer }, State#state{ passthrough_send_buffer = <<>> });
 passthrough({ passthrough, Data }, #state{ socket = Socket, tls_state = true } = State) ->
-    %lager:info("Passing through ssl"),
+    %lager:info("Passing through ssl \"~s\"", [Data]),
     ssl:send(Socket, Data),
     { next_state, passthrough, State };
 passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
-    %lager:info("Passing through tcp"),
+    %lager:info("Passing through tcp \"~s\"", [Data]),
     gen_tcp:send(Socket, Data),
     { next_state, passthrough, State };
 passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
@@ -158,12 +147,12 @@ idle(process_command_queue, #state{ command_queue = Queue } = State) ->
     case queue:out(Queue) of
        { { value, Command }, ModifiedQueue } when is_record(Command, command) ->
             %%lager:info("Clearing queue of ~p", [Command]),
-            StateWithNewQueue = State#state{ command_queue = ModifiedQueue },
-            lager:info("Going to send ~s", [Command]),
-            NewState = send_command(Command, StateWithNewQueue),
+            lager:info("Going to send ~s", [Command#command.message]),
+            NewState = send_command(Command, State#state{ command_queue = ModifiedQueue }),
             { next_state, wait_response, NewState };
        { empty, ModifiedQueue } ->
-            { next_state, idle, State#state{ command_queue = ModifiedQueue } }
+            NextState = next_state_after_emptied_queue(State),
+            { next_state, NextState, State#state{ command_queue = ModifiedQueue } }
     end;
 idle({ data, _Data }, State) ->
     %%lager:info("Idling, server sent: ~p", [_Data]),
@@ -174,6 +163,13 @@ idle(Command, State) when is_record(Command, command) ->
     { next_state, wait_response, NewState };
 idle(_Event, State) ->
     { next_state, idle, State }.
+
+next_state_after_emptied_queue(#state{ passthrough = true }) ->
+    gen_fsm:send_event(self(), flush_passthrough_buffer),
+    passthrough;
+next_state_after_emptied_queue(_State) ->
+    idle.
+
 
 %%TODO a variant that checks "#command{ from = undefined }" to avoid parsing responses which will go undelivered?
 wait_response(Command, State) when is_record(Command, command) ->
@@ -199,10 +195,10 @@ startingtls({ data, Data }, #state{ current_command = #command{ parse_fun = Fun,
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
     next_command_after_response(Response, State).
 
-handle_event(connect, disconnected, State) ->
-    gen_fsm:send_event(self(), connect),
+handle_event({ connect, _From, _ResponseToken } = Event, disconnected, State) ->
+    gen_fsm:send_event(self(), Event),
     { next_state, disconnected, State };
-handle_event(connect, _Statename, State) ->
+handle_event({ connect, _From, _ResponseToken }, _Statename, State) ->
     %%lager:info("Already connected to IMAP server!"),
     { next_state, _Statename, State };
 handle_event(disconnect, _StateName, State) ->
@@ -217,20 +213,52 @@ handle_sync_event(_Event, _From, StateName, State) -> { next_state, StateName, S
 
 handle_info({ ssl, Socket, Bin }, StateName, #state{ socket = Socket } = State) ->
     % Flow control: enable forwarding of next TCP message
-    %lager:info("Received from server: ~p", [Bin]),
+    lager:info("Received from server over ssl: ~s", [Bin]),
     ssl:setopts(Socket, [{ active, once }]),
     ?MODULE:StateName({ data, Bin }, State);
 handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) ->
     % Flow control: enable forwarding of next TCP message
-    %%lager:info("Got us ~p", [Bin]),
+    lager:info("Received from server plaintext: ~s", [Bin]),
     inet:setopts(Socket, [{ active, once }]),
     ?MODULE:StateName({ data, Bin }, State);
-handle_info({tcp_closed, Socket}, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
-    lager:info("~p Client disconnected from ~p:~p .\n", [self(), Host, Port]),
+handle_info({ ssl_closed, Socket }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
+    lager:info("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
-handle_info({tcp_error, Socket, _Reason}, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
-    lager:info("~p Client disconnected due to socket error from ~p:~p .\n", [self(), Host, Port]),
+handle_info({ ssl_error, Socket, _Reason }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
+    lager:info("~p Disconnected due to socket error from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
+handle_info({ tcp_closed, Socket }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
+    lager:info("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
+    { stop, normal, State };
+handle_info({ tcp_error, Socket, _Reason }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
+    lager:info("~p Disconnected due to socket error from ~p:~p .\n", [self(), Host, Port]),
+    { stop, normal, State };
+handle_info({ { connected, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ passthrough = Passthrough, passthrough_recv = PassthroughReceiver, tls = TLS } = State) ->
+    case TLS of
+        starttls ->
+            % we do not pass through or notifty when we are going to automatically do a starttls
+            % this allows us to send the post-starttls capabilities triggering client activity
+            % only AFTER we have completely set up the connectiona, as that usually tends to
+            % alter the capabilities
+            %
+            % if the user of eimap does not want this behavior, they can starttls themselves
+            % explicitly
+            ok;
+        _ ->
+            %lager:debug("Connected, capabilities are: ~s", [Capabilities]),
+            notify_of_response(Capabilities, Receiver, ResponseToken),
+            passthrough_capabilities(Capabilities, Passthrough, PassthroughReceiver),
+            gen_fsm:send_event(self(), process_command_queue)
+    end,
+    { next_state, idle, State#state{ parse_state = none } };
+handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
+    %% TODO: better to capture the actual "server hello" string with server version, etc.
+    HelloString = <<"* OK [CAPABILITY ", Capabilities/binary, "] server ready\r\n">>,
+    %lager:debug("Connected, capabilities are: ~s", [HelloString]),
+    notify_of_response(HelloString, Receiver, ResponseToken),
+    passthrough_capabilities(HelloString, Passthrough, PassthroughReceiver),
+    %do not need to process_command_queue, that's already been done for us! gen_fsm:send_event(self(), process_command_queue),
+    { next_state, idle, State#state{ parse_state = none } };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
     { next_state, StateName, State#state{ current_mbox = MBox } };
@@ -238,7 +266,11 @@ handle_info({ { selected, MBox }, { error, Reason } }, StateName, State) ->
     lager:info("Failed to select mbox ~p: ~p", [MBox, Reason]),
     NewQueue = queue:filter(fun(Command) -> notify_of_mbox_failure_during_filter(Command, Command#command.mbox =:= MBox) end, State#state.command_queue),
     { next_state, StateName, State#state{ command_queue = NewQueue } };
-handle_info(_Info, StateName, State) ->
+handle_info(starttls_complete, StateName, State) ->
+    %lager:info("STARTTLS completed successfully"),
+    { next_state, StateName, State };
+handle_info(Info, StateName, State) ->
+    lager:debug("handle_info called with unhandled info of ~p", [Info]),
     { next_state, StateName, State }.
 
 terminate(_Reason, _Statename, State) -> close_socket(State), ok.
@@ -246,11 +278,16 @@ terminate(_Reason, _Statename, State) -> close_socket(State), ok.
 code_change(_OldVsn, Statename, State, _Extra) -> { ok, Statename, State }.
 
 %% private API
+passthrough_capabilities(Response, true, Receiver) -> Receiver ! { imap_server_response, Response };
+passthrough_capabilities(_Response, _Passthrough, _Receiver) -> ok.
+
 notify_of_response(none, _Command) -> ok;
-notify_of_response(_Response, #command { from = undefined }) -> ok;
-notify_of_response(Response, #command { from = From, response_token = undefined }) -> From ! Response;
-notify_of_response(Response, #command { from = From, response_token = Token }) -> From ! { Token, Response };
+notify_of_response(Response, #command { from = From, response_token = Token }) -> notify_of_response(Response, From, Token);
 notify_of_response(_, _) -> ok.
+
+notify_of_response(_Response, undefined, _Token) -> ok;
+notify_of_response(Response, From, undefined) -> From ! Response;
+notify_of_response(Response, From, Token) -> From ! { Token, Response }.
 
 %% the return is inverted for filtering
 notify_of_mbox_failure_during_filter(Command, true) -> notify_of_response({ error, mailboxnotfound }, Command), false;
@@ -265,27 +302,39 @@ next_command_after_response({ error, _ } = ErrorResponse, State) ->
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State#state{ parse_state = none } };
 next_command_after_response({ fini, Response }, State) ->
+    lager:info("Notifying with ~p", [State#state.current_command]),
     notify_of_response(Response, State#state.current_command),
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State#state{ parse_state = none } };
-next_command_after_response(starttls, #state{ passthrough = Passthrough } = State) ->
+next_command_after_response(starttls, State) ->
     { TLSState, Socket } = upgrade_socket(State),
     %lager:info("~p Upgraded the socket ...", [self()]),
-    NextState = next_state_after_starttls(Passthrough),
-    %lager:info("!!!!!!!!!! our next state is ~p", [NextState]),
-    { next_state, NextState, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } }.
+    gen_fsm:send_event(self(), process_command_queue),
+    { next_state, idle, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } }.
 
 tag_field_width(Serial) when Serial < 10000 -> 4;
 tag_field_width(Serial) -> tag_field_width(Serial / 10000, 5).
 tag_field_width(Serial, Count) when Serial < 10 -> Count;
 tag_field_width(Serial, Count) -> tag_field_width(Serial / 10, Count + 1).
 
-create_socket(Host, Port, true) -> { ssl:connect(Host, Port, socket_options(), ?SSL_UPGRADE_TIMEOUT), true };
-create_socket(Host, Port, starttls) ->
-    Return = gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT),
-    starttls(self(), self(), undefined),
-    { Return, false };
-create_socket(Host, Port, _) -> { gen_tcp:connect(Host, Port, socket_options(), 1000), false }.
+create_socket(Host, Port, true, _Receiver, _ResponseToken, CommandQueue) ->
+    { ssl:connect(Host, Port, socket_options(), ?SSL_UPGRADE_TIMEOUT), true, self(), CommandQueue };
+create_socket(Host, Port, starttls, Receiver, ResponseToken, CommandQueue) ->
+    %lager:debug("Setting up the tls creation with ultimate end point of ~p ~p", [Receiver, ResponseToken]),
+    % we do an implicit TLS by adding a starttls command and then a capability command so we can
+    % pretend to the user that the socket just magically opened up like this.
+    TlsCommand = #command{ message = eimap_command_starttls:new(noparams),
+                           from = self(), response_token = undefined,
+                           parse_fun = fun eimap_command_starttls:parse/2 },
+    CapabilitiesCommand = #command{ message = eimap_command_capability:new(noparams),
+                                    from = self(), response_token = { posttls_capabilities, Receiver, ResponseToken },
+                                    parse_fun = fun eimap_command_capability:parse/2 },
+    % note the use of queue:in_r to _prepend_ the commands so they get run first even if the user
+    % has pre-connection queued up commands
+    NewCommandQueue = queue:in_r(TlsCommand, queue:in_r(CapabilitiesCommand, CommandQueue)),
+    { gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT), false, undefined, NewCommandQueue };
+create_socket(Host, Port, _, _Receiver, _ResponseToken, CommandQueue) ->
+    { gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT), false, self(), CommandQueue }.
 
 socket_options() -> [binary, { active, once }, { send_timeout, 5000 }].
 
@@ -294,8 +343,7 @@ upgrade_socket(#state{ socket = Socket, tls_state = true, current_command = Comm
     ssl:setopts(Socket, [{ active, once }]),
     { true, Socket };
 upgrade_socket(#state{ socket = Socket, current_command = Command }) ->
-    %lager:info("~p upgrading the server socket due to starttls ******************************************************", [self()]),
-    inet:setopts(Socket, [{ active, false }]),
+    %lager:debug("~p upgrading the server socket due to starttls"[self()]),
     case ssl:connect(Socket, socket_options(), ?SSL_UPGRADE_TIMEOUT) of
         { ok, SSLSocket } ->
             %lager:info("~p it worked", [self()]),
