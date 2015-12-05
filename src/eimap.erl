@@ -32,6 +32,7 @@
          starttls/3,
          capabilities/3,
          login/5,
+         compress/1,
          get_folder_annotations/4,
          get_message_headers_and_body/5,
          get_path_tokens/3]).
@@ -44,7 +45,8 @@
 -record(state, { host, port, tls, tls_state = false, socket,
                  command_serial = 1, command_queue = queue:new(),
                  current_command, current_mbox, parse_state,
-                 passthrough = false, passthrough_recv, passthrough_send_buffer = <<>> }).
+                 passthrough = false, passthrough_recv, passthrough_send_buffer = <<>>,
+                 inflator, deflator}).
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
 
 -define(SSL_UPGRADE_TIMEOUT, 2000).
@@ -59,6 +61,12 @@ passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_event(PID, { pa
 connect(PID) -> connect(PID, undefined, undefined).
 connect(PID, From, ResponseToken) -> gen_fsm:send_all_state_event(PID, { connect, From, ResponseToken }).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
+
+compress(PID) when is_pid(PID) ->
+    Command = #command{ message = eimap_command_compress:new(ok),
+                        from = PID, response_token = compress,
+                        parse_fun = fun eimap_command_compress:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 starttls(PID, From, ResponseToken) when is_pid(PID) ->
     Command = #command{ message = eimap_command_starttls:new(ok),
@@ -213,14 +221,16 @@ handle_sync_event(_Event, _From, StateName, State) -> { next_state, StateName, S
 
 handle_info({ ssl, Socket, Bin }, StateName, #state{ socket = Socket } = State) ->
     % Flow control: enable forwarding of next TCP message
-    % lager:info("Received from server over ssl: ~s", [Bin]),
     ssl:setopts(Socket, [{ active, once }]),
-    ?MODULE:StateName({ data, Bin }, State);
+    Data = inflated(Bin, State),
+    % lager:info("Received from server over ssl: ~s", [Data]),
+    ?MODULE:StateName({ data, Data }, State);
 handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) ->
     % Flow control: enable forwarding of next TCP message
-    % lager:info("Received from server plaintext: ~s", [Bin]),
     inet:setopts(Socket, [{ active, once }]),
-    ?MODULE:StateName({ data, Bin }, State);
+    Data = inflated(Bin, State),
+    % lager:info("Received from server plaintext: ~s", [Data]),
+    ?MODULE:StateName({ data, Data }, State);
 handle_info({ ssl_closed, Socket }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
     lager:info("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
@@ -263,6 +273,12 @@ handle_info({ { selected, MBox }, { error, Reason } }, StateName, State) ->
     { next_state, StateName, State#state{ command_queue = NewQueue } };
 handle_info(starttls_complete, StateName, State) ->
     %lager:info("STARTTLS completed successfully"),
+    { next_state, StateName, State };
+handle_info({ compress, compression_active }, StateName, State) ->
+    { Inflator, Deflator } = eimap_utils:new_imap_compressors(),
+    { next_state, StateName, State#state{ inflator = Inflator, deflator = Deflator } };
+handle_info({ compress, { error, Reason } }, StateName, State) ->
+    lager:info("Request to compress the server stream failed: ~p", [Reason]),
     { next_state, StateName, State };
 handle_info(Info, StateName, State) ->
     lager:debug("handle_info called with unhandled info of ~p", [Info]),
@@ -395,7 +411,7 @@ send_command_now(Fun, #command{ message = Message } = Command, #state{ command_s
     Tag = list_to_binary(io_lib:format("EG~*..0B", [tag_field_width(Serial), Serial])),
     Data = <<Tag/binary, " ", Message/binary, "\n">>,
     %%lager:info("Sending command via ~p: ~s", [Fun, Data]),
-    Fun(Socket, Data),
+    Fun(Socket, deflated(Data, State)),
     State#state{ command_serial = Serial + 1, current_command = Command#command{ tag = Tag } }.
 
 enque_command(Command, State) ->
@@ -405,4 +421,14 @@ enque_command(Command, State) ->
 reenque_command(Command, State) ->
     %%lager:info("Re-queueing command ~p", [Command]),
     State#state { command_queue = queue:in_r(Command, State#state.command_queue) }.
+
+inflated(Data, #state{ inflator = undefined }) -> Data;
+inflated(Data, #state{ inflator = Inflator }) ->  joined(zlib:inflate(Inflator, Data), <<>>).
+
+deflated(Data, #state{ deflator = undefined }) -> Data;
+deflated(Data, #state{ deflator = Deflator }) ->  joined(zlib:deflate(Deflator, Data), <<>>).
+
+joined([], Binary) -> Binary;
+joined([H|Rest], Binary) -> joined(Rest, <<Binary/binary, H/binary>>).
+
 

@@ -21,7 +21,8 @@
          split_command_into_components/1,
          header_name/1,
          check_response_for_failure/2,
-         ensure_binary/1
+         ensure_binary/1,
+         new_imap_compressors/0
         ]).
 
 %% Translate the folder name in to a fully qualified folder path such as it
@@ -123,4 +124,9 @@ ensure_binary(Arg) when is_list(Arg) -> list_to_binary(Arg);
 ensure_binary(Arg) when is_binary(Arg) -> Arg;
 ensure_binary(_Arg) -> <<>>.
 
-
+new_imap_compressors() ->
+    Inflator = zlib:open(),
+    ok = zlib:inflateInit(Inflator, -15),
+    Deflator = zlib:open(),
+    ok = zlib:deflateInit(Deflator, 1, deflated, -15, 8, default),
+    { Inflator, Deflator }.
