@@ -246,18 +246,13 @@ handle_info({ { connected, Receiver, ResponseToken }, Capabilities }, _StateName
             ok;
         _ ->
             %lager:debug("Connected, capabilities are: ~s", [Capabilities]),
-            notify_of_response(Capabilities, Receiver, ResponseToken),
-            passthrough_capabilities(Capabilities, Passthrough, PassthroughReceiver),
-            gen_fsm:send_event(self(), process_command_queue)
+            %% TODO: capture and use the actual "server hello" string with server version, etc.
+            send_hello_string(Capabilities, <<>>, <<>>, Receiver, ResponseToken, Passthrough, PassthroughReceiver)
     end,
     { next_state, idle, State#state{ parse_state = none } };
 handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
-    %% TODO: better to capture the actual "server hello" string with server version, etc.
-    HelloString = <<"* OK [CAPABILITY ", Capabilities/binary, "] server ready\r\n">>,
-    %lager:debug("Connected, capabilities are: ~s", [HelloString]),
-    notify_of_response(HelloString, Receiver, ResponseToken),
-    passthrough_capabilities(HelloString, Passthrough, PassthroughReceiver),
-    %do not need to process_command_queue, that's already been done for us! gen_fsm:send_event(self(), process_command_queue),
+    %% TODO: capture and use the actual "server hello" string with server version, etc.
+    send_hello_string(Capabilities, <<>>, <<>>, Receiver, ResponseToken, Passthrough, PassthroughReceiver),
     { next_state, idle, State#state{ parse_state = none } };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
@@ -278,6 +273,11 @@ terminate(_Reason, _Statename, State) -> close_socket(State), ok.
 code_change(_OldVsn, Statename, State, _Extra) -> { ok, Statename, State }.
 
 %% private API
+send_hello_string(Capabilities, Hostname, ServerId, Receiver, ResponseToken, Passthrough, PassthroughReceiver) ->
+    Message = <<"* OK [CAPABILITY ", Capabilities/binary, "] ", Hostname/binary, " ", ServerId/binary, " server ready\r\n">>,
+    notify_of_response(Message, Receiver, ResponseToken),
+    passthrough_capabilities(Message, Passthrough, PassthroughReceiver).
+
 passthrough_capabilities(Response, true, Receiver) -> Receiver ! { imap_server_response, Response };
 passthrough_capabilities(_Response, _Passthrough, _Receiver) -> ok.
 
