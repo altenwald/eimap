@@ -57,7 +57,7 @@ start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> ge
 
 start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_event(PID, { start_passthrough, Receiver } ).
 stop_passthrough(PID) -> gen_fsm:send_event(PID, stop_passthrough).
-passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_event(PID, { passthrough, Data }).
+passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_all_state_event(PID, { passthrough, Data }).
 connect(PID) -> connect(PID, undefined, undefined).
 connect(PID, From, ResponseToken) -> gen_fsm:send_all_state_event(PID, { connect, From, ResponseToken }).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
@@ -116,8 +116,6 @@ disconnected({ start_passthrough, Receiver }, State) ->
     { next_state, disconnected, State#state{ passthrough = true, passthrough_recv = Receiver } };
 disconnected(stop_passthrough, State) ->
     { next_state, disconnected, State#state{ passthrough = false } };
-disconnected({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
-    { next_state, disconnected, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
 disconnected({ connect, Receiver, ResponseToken }, #state{ command_queue = CommandQueue, host = Host, port = Port, tls = TLS, socket = undefined } = State) ->
     %lager:debug("CONNECTING! ~p ~p", [Receiver, ResponseToken]),
     { {ok, Socket}, TlsState, SendCapabilitiesTo, NewCommandQueue } = create_socket(Host, Port, TLS, Receiver, ResponseToken, CommandQueue),
@@ -129,17 +127,18 @@ disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
 
 passthrough(flush_passthrough_buffer, #state{ passthrough_send_buffer = Buffer } = State) ->
-    lager:info("Passing through ~p", [Buffer]),
+    %lager:info("Passing through ~p", [Buffer]),
     passthrough({ passthrough, Buffer }, State#state{ passthrough_send_buffer = <<>> });
 passthrough({ passthrough, Data }, #state{ socket = Socket, tls_state = true } = State) ->
     %lager:info("Passing through ssl \"~s\"", [Data]),
-    ssl:send(Socket, Data),
+    ssl:send(Socket, deflated(Data, State)),
     { next_state, passthrough, State };
 passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
-    %lager:info("Passing through tcp \"~s\"", [Data]),
-    gen_tcp:send(Socket, Data),
+    lager:info("Passing through tcp \"~s\"", [Data]),
+    gen_tcp:send(Socket, deflated(Data, State)),
     { next_state, passthrough, State };
 passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
+    lager:info("Passing back ~p", [Data]),
     Receiver ! { imap_server_response, Data },
     { next_state, passthrough, State };
 passthrough({ start_passthrough, Receiver }, State) ->
@@ -149,13 +148,15 @@ passthrough({ start_passthrough, Receiver }, State) ->
     { next_state, passthrough, State#state{ passthrough_recv = Receiver } };
 passthrough(stop_passthrough, State) ->
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ passthrough = false } }.
+    { next_state, idle, State#state{ passthrough = false } };
+passthrough(Command, State) when is_record(Command, command) ->
+    gen_fsm:send_event(self(), process_command_queue),
+    { next_state, idle, enque_command(Command, State) }.
 
 idle(process_command_queue, #state{ command_queue = Queue } = State) ->
     case queue:out(Queue) of
        { { value, Command }, ModifiedQueue } when is_record(Command, command) ->
             %%lager:info("Clearing queue of ~p", [Command]),
-            lager:info("Going to send ~s", [Command#command.message]),
             NewState = send_command(Command, State#state{ command_queue = ModifiedQueue }),
             { next_state, wait_response, NewState };
        { empty, ModifiedQueue } ->
@@ -213,8 +214,12 @@ handle_event(disconnect, _StateName, State) ->
     close_socket(State),
     { next_state, disconnected, reset_state(State) };
 handle_event({ ready_command, Command }, StateName, State) when is_record(Command, command) ->
-    %%lager:info("Making command .. ~p", [Command]),
     ?MODULE:StateName(Command, State);
+handle_event({ passthrough, Data }, passthrough, #state{ passthrough = true } = State) ->
+    ?MODULE:passthrough({ passthrough, Data }, State);
+handle_event({ passthrough, Data }, StateName, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
+    NewBuffer = <<Buffer/binary, Data/binary>>,
+    { next_state, StateName, State#state{ passthrough_send_buffer = NewBuffer } };
 handle_event(_Event, StateName, State) -> { next_state, StateName, State}.
 
 handle_sync_event(_Event, _From, StateName, State) -> { next_state, StateName, State}.
@@ -223,13 +228,13 @@ handle_info({ ssl, Socket, Bin }, StateName, #state{ socket = Socket } = State) 
     % Flow control: enable forwarding of next TCP message
     ssl:setopts(Socket, [{ active, once }]),
     Data = inflated(Bin, State),
-    % lager:info("Received from server over ssl: ~s", [Data]),
+    %lager:info("Received from server over ssl: ~s", [Data]),
     ?MODULE:StateName({ data, Data }, State);
 handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) ->
     % Flow control: enable forwarding of next TCP message
     inet:setopts(Socket, [{ active, once }]),
     Data = inflated(Bin, State),
-    % lager:info("Received from server plaintext: ~s", [Data]),
+    %lager:info("Received from server plaintext: ~s", [Data]),
     ?MODULE:StateName({ data, Data }, State);
 handle_info({ ssl_closed, Socket }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
     lager:info("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
@@ -274,12 +279,6 @@ handle_info({ { selected, MBox }, { error, Reason } }, StateName, State) ->
 handle_info(starttls_complete, StateName, State) ->
     %lager:info("STARTTLS completed successfully"),
     { next_state, StateName, State };
-handle_info({ compress, compression_active }, StateName, State) ->
-    { Inflator, Deflator } = eimap_utils:new_imap_compressors(),
-    { next_state, StateName, State#state{ inflator = Inflator, deflator = Deflator } };
-handle_info({ compress, { error, Reason } }, StateName, State) ->
-    lager:info("Request to compress the server stream failed: ~p", [Reason]),
-    { next_state, StateName, State };
 handle_info(Info, StateName, State) ->
     lager:debug("handle_info called with unhandled info of ~p", [Info]),
     { next_state, StateName, State }.
@@ -318,7 +317,7 @@ next_command_after_response({ error, _ } = ErrorResponse, State) ->
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State#state{ parse_state = none } };
 next_command_after_response({ fini, Response }, State) ->
-    lager:info("Notifying with ~p", [State#state.current_command]),
+    %lager:info("Notifying with ~p", [State#state.current_command]),
     notify_of_response(Response, State#state.current_command),
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State#state{ parse_state = none } };
@@ -326,7 +325,11 @@ next_command_after_response(starttls, State) ->
     { TLSState, Socket } = upgrade_socket(State),
     %lager:info("~p Upgraded the socket ...", [self()]),
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } }.
+    { next_state, idle, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } };
+next_command_after_response(compression_active, State) ->
+    { Inflator, Deflator } = eimap_utils:new_imap_compressors(),
+    gen_fsm:send_event(self(), process_command_queue),
+    { next_state, idle, State#state{ inflator = Inflator, deflator = Deflator } }.
 
 tag_field_width(Serial) when Serial < 10000 -> 4;
 tag_field_width(Serial) -> tag_field_width(Serial / 10000, 5).
@@ -410,7 +413,7 @@ send_command_or_select_mbox(Fun, DelayedCommand, State, MBox, false) ->
 send_command_now(Fun, #command{ message = Message } = Command, #state{ command_serial = Serial, socket = Socket } = State) ->
     Tag = list_to_binary(io_lib:format("EG~*..0B", [tag_field_width(Serial), Serial])),
     Data = <<Tag/binary, " ", Message/binary, "\n">>,
-    %%lager:info("Sending command via ~p: ~s", [Fun, Data]),
+    %lager:info("Sending command via ~p: ~s", [Fun, Data]),
     Fun(Socket, deflated(Data, State)),
     State#state{ command_serial = Serial + 1, current_command = Command#command{ tag = Tag } }.
 
@@ -426,7 +429,7 @@ inflated(Data, #state{ inflator = undefined }) -> Data;
 inflated(Data, #state{ inflator = Inflator }) ->  joined(zlib:inflate(Inflator, Data), <<>>).
 
 deflated(Data, #state{ deflator = undefined }) -> Data;
-deflated(Data, #state{ deflator = Deflator }) ->  joined(zlib:deflate(Deflator, Data), <<>>).
+deflated(Data, #state{ deflator = Deflator }) ->  joined(zlib:deflate(Deflator, Data, sync), <<>>).
 
 joined([], Binary) -> Binary;
 joined([H|Rest], Binary) -> joined(Rest, <<Binary/binary, H/binary>>).
