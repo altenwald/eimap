@@ -138,7 +138,7 @@ passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
     gen_tcp:send(Socket, deflated(Data, State)),
     { next_state, passthrough, State };
 passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
-    lager:info("Passing back ~p", [Data]),
+    %lager:info("Passing back ~p", [Data]),
     Receiver ! { imap_server_response, Data },
     { next_state, passthrough, State };
 passthrough({ start_passthrough, Receiver }, State) ->
