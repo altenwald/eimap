@@ -134,7 +134,7 @@ passthrough({ passthrough, Data }, #state{ socket = Socket, tls_state = true } =
     ssl:send(Socket, deflated(Data, State)),
     { next_state, passthrough, State };
 passthrough({ passthrough, Data }, #state{ socket = Socket } = State) ->
-    lager:info("Passing through tcp \"~s\"", [Data]),
+    %lager:info("Passing through tcp \"~s\"", [Data]),
     gen_tcp:send(Socket, deflated(Data, State)),
     { next_state, passthrough, State };
 passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
