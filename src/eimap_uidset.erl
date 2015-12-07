@@ -22,6 +22,7 @@
 -record(uidset, { tokens = [], current = none }).
 
 %% currently do not support parsing regular (list) strings, but could be added
+parse(<<>>)  -> badarg;
 parse(UidSet) when is_binary(UidSet) ->
     Components = binary:split(UidSet, <<",">>, [global]),
     try lists:foldl(fun(Component, Acc) -> add_component(binary:split(Component, <<":">>), Acc) end, [], Components) of
