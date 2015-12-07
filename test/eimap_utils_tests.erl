@@ -30,7 +30,7 @@ extract_path_from_uri_test_() ->
           none, "/",
           <<"imap://john.doe@example.org@kolab.example.org/Personal%20Calendar;UIDVALIDITY=1424683684/;UID=1">> }
     ],
-    lists:foldl(fun({ Val, SharePrefix, Sep, Input }, Acc) -> [?_assert(Val == eimap_utils:extract_path_from_uri(SharePrefix, Sep, Input))|Acc] end,
+    lists:foldl(fun({ Val, SharePrefix, Sep, Input }, Acc) -> [?_assertEqual(Val, eimap_utils:extract_path_from_uri(SharePrefix, Sep, Input))|Acc] end,
                 [], Data).
 
 extract_uid_from_uri_test_() ->
@@ -43,7 +43,7 @@ extract_uid_from_uri_test_() ->
         { <<"12">>, <<"imap://john.doe@example.org@kolab.example.org/Calendar;UIDVALIDITY=1424683684/;UID=12;foo=bar">> },
         { <<"123">>, <<"imap://john.doe@example.org@kolab.example.org/Calendar;UIDVALIDITY=1424683684/;UID=123;foo=bar">> }
     ],
-    lists:foldl(fun({ Val, Input }, Acc) -> [?_assert(Val == eimap_utils:extract_uidset_from_uri(Input))|Acc] end,
+    lists:foldl(fun({ Val, Input }, Acc) -> [?_assertEqual(Val, eimap_utils:extract_uidset_from_uri(Input))|Acc] end,
                 [], Data).
 
 split_command_into_components_test_() ->
@@ -53,6 +53,19 @@ split_command_into_components_test_() ->
         { { <<"1">>, <<"STARTTLS">>, <<>> }, <<"1 STARTTLS\r\n">> },
         { { <<"3">>, <<"ID">>, <<"(\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }, <<"3 ID (\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }
     ],
-    lists:foldl(fun({ Val, Input }, Acc) -> [?_assert(Val == eimap_utils:split_command_into_components(Input)) | Acc] end,
+    lists:foldl(fun({ Val, Input }, Acc) -> [?_assertEqual(Val, eimap_utils:split_command_into_components(Input)) | Acc] end,
                  [], Data).
+
+check_response_for_failure_test_() ->
+    Tag = <<"abcd">>,
+    Data =
+    [
+       { <<Tag/binary, " NO reasons\r\n">>, { no, <<"reasons">> } },
+       { <<Tag/binary, " NO reasons">>, { no, <<"reasons">> } },
+       { <<Tag/binary, " BAD reasons\r\n">>, { bad, <<"reasons">> } },
+       { <<Tag/binary, " BAD reasons">>, { bad, <<"reasons">> } },
+       { <<Tag/binary, " OK reasons">>, ok }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:check_response_for_failure(Input, Tag)) | Acc] end, [], Data).
+
 
