@@ -33,8 +33,10 @@ extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_list(URI) ->
     %%lager:info("Parsing ~p", [URI]),
     SchemeDefaults = [{ imap, 143 }, { imaps, 993 }],
     ParseOpts = [ { scheme_defaults, SchemeDefaults } ],
-    Path = imap_folder_path(SharedPrefix, HierarchyDelim, http_uri:parse(URI, ParseOpts)),
-    list_to_binary(Path).
+    case imap_folder_path(SharedPrefix, HierarchyDelim, http_uri:parse(URI, ParseOpts)) of
+        Path when is_list(Path) -> list_to_binary(Path);
+        Error -> Error
+    end.
 
 extract_uidset_from_uri(URI) when is_binary(URI) ->
     { TagStart, TagEnd } = binary:match(URI, <<";UID=">>),
@@ -57,7 +59,7 @@ check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
     NoToken = <<Tag/binary, " NO ">>,
     NoTokenLength = byte_size(NoToken),
     case NoTokenLength > byte_size(Data) of
-        true -> tokentoolong;
+        true -> ok;
         false -> is_no_token_found(Data, Tag, binary:match(Data, NoToken, [ { scope, { 0, NoTokenLength } } ]))
     end.
 
@@ -116,12 +118,8 @@ searched_in_buffer(Buffer, Start, _End, { MatchStart, MatchLength } ) -> { binar
 is_no_token_found(Data, Tag, nomatch) ->
     BadToken = <<Tag/binary, " BAD ">>,
     BadTokenLength = byte_size(BadToken),
-    case BadTokenLength > byte_size(Data) of
-        true -> tokentoolong;
-        false ->
-            Match = binary:match(Data, BadToken, [ { scope, { 0, BadTokenLength } } ]),
-            is_bad_token_found(Data, Tag, Match)
-    end;
+    Match = binary:match(Data, BadToken, [ { scope, { 0, BadTokenLength } } ]),
+    is_bad_token_found(Data, Tag, Match);
 is_no_token_found(Data, _Tag, { Start, Length }) ->
     ReasonStart = Start + Length,
     Reason = binary:part(Data, ReasonStart, byte_size(Data) - ReasonStart),

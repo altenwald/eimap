@@ -23,12 +23,21 @@
 extract_path_from_uri_test_() ->
     Data =
     [
-        { <<"user/john.doe/Calendar@example.org">>,
+        {
+          <<"user/john.doe/Calendar@example.org">>,
           none, "/",
-          <<"imap://john.doe@example.org@kolab.example.org/Calendar;UIDVALIDITY=1424683684/;UID=1">> },
-        { <<"user/john.doe/Personal Calendar@example.org">>,
+          <<"imap://john.doe@example.org@kolab.example.org/Calendar;UIDVALIDITY=1424683684/;UID=1">>
+        },
+        {
+          <<"user/john.doe/Personal Calendar@example.org">>,
           none, "/",
-          <<"imap://john.doe@example.org@kolab.example.org/Personal%20Calendar;UIDVALIDITY=1424683684/;UID=1">> }
+          <<"imap://john.doe@example.org@kolab.example.org/Personal%20Calendar;UIDVALIDITY=1424683684/;UID=1">>
+        },
+        {
+          bad_uri,
+          none, "/",
+          <<"merf">>
+        }
     ],
     lists:foldl(fun({ Val, SharePrefix, Sep, Input }, Acc) -> [?_assertEqual(Val, eimap_utils:extract_path_from_uri(SharePrefix, Sep, Input))|Acc] end,
                 [], Data).
@@ -49,6 +58,7 @@ extract_uid_from_uri_test_() ->
 split_command_into_components_test_() ->
     Data =
     [
+        { { <<>>, <<>>, <<>> }, <<>> },
         { { <<"1">>, <<"STARTTLS">>, <<>> }, <<"1 STARTTLS">> },
         { { <<"1">>, <<"STARTTLS">>, <<>> }, <<"1 STARTTLS\r\n">> },
         { { <<"3">>, <<"ID">>, <<"(\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }, <<"3 ID (\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }
@@ -57,16 +67,18 @@ split_command_into_components_test_() ->
                  [], Data).
 
 check_response_for_failure_test_() ->
-    Tag = <<"abcd">>,
+    Tag = <<"abcdef">>,
     Data =
     [
-       { <<Tag/binary, " NO reasons\r\n">>, { no, <<"reasons">> } },
-       { <<Tag/binary, " NO reasons">>, { no, <<"reasons">> } },
-       { <<Tag/binary, " BAD reasons\r\n">>, { bad, <<"reasons">> } },
-       { <<Tag/binary, " BAD reasons">>, { bad, <<"reasons">> } },
-       { <<Tag/binary, " OK reasons">>, ok }
+       { Tag, <<Tag/binary, " NO reasons\r\n">>, { no, <<"reasons">> } },
+       { Tag, <<Tag/binary, " NO reasons">>, { no, <<"reasons">> } },
+       { Tag, <<Tag/binary, " BAD reasons\r\n">>, { bad, <<"reasons">> } },
+       { Tag, <<Tag/binary, " BAD reasons">>, { bad, <<"reasons">> } },
+       { Tag, <<Tag/binary, " OK reasons">>, ok },
+       { Tag, <<"short">>, ok },
+       { undefined, <<"* OK reasons">>, ok }
     ],
-    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:check_response_for_failure(Input, Tag)) | Acc] end, [], Data).
+    lists:foldl(fun({ Tag2, Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:check_response_for_failure(Input, Tag2)) | Acc] end, [], Data).
 
 is_tagged_response_test_() ->
     Tag = <<"abcd">>,
@@ -74,6 +86,7 @@ is_tagged_response_test_() ->
     [
        { <<Tag/binary, " Indeed\r\n">>, true },
        { <<Tag/binary, " Indeed">>, true },
+       { <<"one">>, false },
        { <<"* Yeah baby">>, false }
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:is_tagged_response(Input, Tag)) | Acc] end, [], Data).
@@ -119,7 +132,8 @@ ensure_binary_test_() ->
         { "yep", <<"yep">> },
         { <<"yep">>, <<"yep">> },
         { [1, 2, 3], <<1, 2, 3>> },
-        { yep, <<"yep">> }
+        { yep, <<"yep">> },
+        { 123, <<>> }
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:ensure_binary(Input)) | Acc] end, [], Data).
 
