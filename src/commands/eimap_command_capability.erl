@@ -40,10 +40,6 @@ formulate_reponse(ok, <<"* CAPABILITY ", Data/binary>>) ->
     { End, _ } = binary:match(Data, <<"\r\n">>),
     Capabilities = binary:part(Data, { 0, End }),
     { fini, Capabilities };
-formulate_reponse(ok, <<"CAPABILITY ", Data/binary>>) ->
-    { End, _ } = binary:match(Data, <<"\r\n">>),
-    Capabilities = binary:part(Data, { 0, End }),
-    { fini, Capabilities };
 formulate_reponse(ok, Data) -> Data;
 formulate_reponse({ _, Reason }, _Data) -> { error, Reason }.
 
