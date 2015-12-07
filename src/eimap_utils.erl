@@ -74,7 +74,9 @@ is_tagged_response(Buffer, Tag) ->
         false -> false
     end.
 
--spec remove_tag_from_response(Buffer :: binary(), Tag :: binary(), Check :: check | trust) -> Command :: binary().
+-spec remove_tag_from_response(Buffer :: binary(), Tag :: undefine | binary(), Check :: check | trust) -> Command :: binary().
+remove_tag_from_response(Buffer, undefined, _) ->
+    Buffer;
 remove_tag_from_response(Buffer, <<>>, _) ->
     Buffer;
 remove_tag_from_response(Buffer, Tag, check) ->

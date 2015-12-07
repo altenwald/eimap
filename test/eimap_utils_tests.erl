@@ -82,19 +82,23 @@ remove_tag_from_response_test_() ->
     Tag = <<"abcd">>,
     Data =
     [
-       { <<Tag/binary, " Indeed\r\n">>, check, <<"Indeed\r\n">> },
-       { <<Tag/binary, " Indeed\r\n">>, trust, <<"Indeed\r\n">> },
-       { <<Tag/binary, " Indeed">>, check, <<"Indeed">>},
-       { <<Tag/binary, " Indeed">>, trust, <<"Indeed">>},
-       { <<"abcd4 Indeed">>, check, <<"abcd4 Indeed">>},
-       { <<"abcd4 Indeed">>, trust, <<" Indeed">>},
-       { <<"* Yeah baby">>, check, <<"* Yeah baby">> },
-       { <<"">>, check, <<"">> },
-       { <<"">>, trust, <<"">> },
-       { <<>>, check, <<>> },
-       { <<>>, trust, <<>> }
+       { Tag, <<Tag/binary, " Indeed\r\n">>, check, <<"Indeed\r\n">> },
+       { Tag, <<Tag/binary, " Indeed\r\n">>, trust, <<"Indeed\r\n">> },
+       { Tag, <<Tag/binary, " Indeed">>, check, <<"Indeed">>},
+       { Tag, <<Tag/binary, " Indeed">>, trust, <<"Indeed">>},
+       { undefined, <<"abcd4 Indeed">>, check, <<"abcd4 Indeed">>},
+       { undefined, <<"abcd4 Indeed">>, trust, <<"abcd4 Indeed">>},
+       { <<>>, <<"abcd4 Indeed">>, check, <<"abcd4 Indeed">>},
+       { <<>>, <<"abcd4 Indeed">>, trust, <<"abcd4 Indeed">>},
+       { Tag, <<"abcd4 Indeed">>, check, <<"abcd4 Indeed">>},
+       { Tag, <<"abcd4 Indeed">>, trust, <<" Indeed">>},
+       { Tag, <<"* Yeah baby">>, check, <<"* Yeah baby">> },
+       { Tag, <<"">>, check, <<"">> },
+       { Tag, <<"">>, trust, <<"">> },
+       { Tag, <<>>, check, <<>> },
+       { Tag, <<>>, trust, <<>> }
     ],
-    lists:foldl(fun({ Input, Check, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:remove_tag_from_response(Input, Tag, Check)) | Acc] end, [], Data).
+    lists:foldl(fun({ Tag2, Input, Check, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:remove_tag_from_response(Input, Tag2, Check)) | Acc] end, [], Data).
 
 header_name_test_() ->
     Data =
