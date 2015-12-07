@@ -44,6 +44,16 @@ extract_path_from_uri_test_() ->
           <<"imap://kolab.example.org/Shared/Personal%20Calendar;UIDVALIDITY=1424683684/;UID=1">>
         },
         {
+          <<"Personal Calendar">>,
+          "Shared/", "/",
+          <<"imap://kolab.example.org/Personal%20Calendar;UIDVALIDITY=1424683684/;UID=1">>
+        },
+        {
+          <<"user/john.doe@example.org">>,
+          "Shared/", "/",
+          <<"imap://john.doe@example.org@kolab.example.org/INBOX;UIDVALIDITY=1424683684/;UID=1">>
+        },
+        {
           bad_uri,
           none, "/",
           <<"merf">>
