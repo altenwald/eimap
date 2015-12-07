@@ -28,7 +28,7 @@ parse_test_() ->
           { fini, <<"IMAP4rev1 LITERAL+ ID ENABLE STARTTLS LOGINDISABLED">> }
         },
         {
-          <<"abcd CAPABILITY IMAP4rev1 LITERAL+ ID ENABLE STARTTLS AUTH=PLAIN AUTH=LOGIN SASL-IR\r\nabcd OK CAPABILITY COMPLETED\r\n">>,
+          <<"* CAPABILITY IMAP4rev1 LITERAL+ ID ENABLE STARTTLS AUTH=PLAIN AUTH=LOGIN SASL-IR\r\nabcd OK CAPABILITY COMPLETED\r\n">>,
           <<"abcd">>,
           { fini, <<"IMAP4rev1 LITERAL+ ID ENABLE STARTTLS AUTH=PLAIN AUTH=LOGIN SASL-IR">> }
         },
