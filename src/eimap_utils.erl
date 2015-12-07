@@ -18,7 +18,7 @@
 -module(eimap_utils).
 -export([
          extract_path_from_uri/3, extract_uidset_from_uri/1,
-         split_command_into_components/1, remove_tag_from_command/3,
+         split_command_into_components/1, is_tagged_response/2, remove_tag_from_command/3,
          header_name/1,
          check_response_for_failure/2,
          ensure_binary/1,
@@ -50,6 +50,7 @@ header_name(groupware_type) -> <<"X-Kolab-Type">>;
 header_name(groupware_uid) -> <<"Subject">>;
 header_name(_) -> unknown.
 
+-spec check_response_for_failure(Data :: binary(), Tag :: undefined | binary()) -> ok | { error, Reason :: binary() }.
 check_response_for_failure(Data, undefined) when is_binary(Data) ->
     check_response_for_failure(Data, <<>>);
 check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
@@ -60,6 +61,15 @@ check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
 -spec split_command_into_components(Buffer :: binary()) -> { Tag :: binary(), Command :: binary(), Data :: binary() }.
 split_command_into_components(Buffer) when is_binary(Buffer) ->
     split_command(Buffer).
+
+-spec is_tagged_response(Buffer :: binary(), Tag :: binary()) -> true | false.
+is_tagged_response(Buffer, Tag) ->
+    TagSize = size(Tag) + 1, % The extra char is a space
+    BufferSize = size(Buffer),
+    case (TagSize =< BufferSize) of
+        true -> <<Tag/binary, " ">> =:= binary:part(Buffer, 0, TagSize);
+        false -> false
+    end.
 
 -spec remove_tag_from_command(Buffer :: binary(), Tag :: binary(), Check :: check | trust) -> Command :: binary().
 remove_tag_from_command(Buffer, <<>>, _) ->
