@@ -24,7 +24,8 @@
 %% Public API
 new(_Args) -> <<"CAPABILITY">>.
 
-parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Data, Tag), Data).
+parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Data, Tag),
+                                      eimap_utils:remove_tag_from_command(Data, Tag, trust)).
 
 
 %% Private API
@@ -39,5 +40,10 @@ formulate_reponse(ok, <<"* CAPABILITY ", Data/binary>>) ->
     { End, _ } = binary:match(Data, <<"\r\n">>),
     Capabilities = binary:part(Data, { 0, End }),
     { fini, Capabilities };
+formulate_reponse(ok, <<"CAPABILITY ", Data/binary>>) ->
+    { End, _ } = binary:match(Data, <<"\r\n">>),
+    Capabilities = binary:part(Data, { 0, End }),
+    { fini, Capabilities };
+formulate_reponse(ok, Data) -> Data;
 formulate_reponse({ _, Reason }, _Data) -> { error, Reason }.
 
