@@ -141,7 +141,7 @@ chop_newline(Data, $\r, Size) -> chop_newline(Data, binary:at(Data, Size - 1), S
 chop_newline(Data, $\n, Size) -> chop_newline(Data, binary:at(Data, Size - 1), Size - 1);
 chop_newline(Data, _, Size) -> binary_part(Data, 0, Size + 1).
 
-imap_folder_path_from_parts(none, _HierarchyDelim, none, _Domain, Path) ->
+imap_folder_path_from_parts(none, _HierarchyDelim, [], _Domain, Path) ->
     Path;
 imap_folder_path_from_parts(SharedPrefix, _HierarchyDelim, none, _Domain, Path) ->
     case SharedPrefix == string:chars(length(SharedPrefix), Path) of
