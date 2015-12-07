@@ -412,7 +412,7 @@ send_command_or_select_mbox(Fun, DelayedCommand, State, MBox, false) ->
 
 send_command_now(Fun, #command{ message = Message } = Command, #state{ command_serial = Serial, socket = Socket } = State) ->
     Tag = list_to_binary(io_lib:format("EG~*..0B", [tag_field_width(Serial), Serial])),
-    Data = <<Tag/binary, " ", Message/binary, "\n">>,
+    Data = <<Tag/binary, " ", Message/binary, "\r\n">>,
     %lager:info("Sending command via ~p: ~s", [Fun, Data]),
     Fun(Socket, deflated(Data, State)),
     State#state{ command_serial = Serial + 1, current_command = Command#command{ tag = Tag } }.
