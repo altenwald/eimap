@@ -18,7 +18,7 @@
 -module(eimap_utils).
 -export([
          extract_path_from_uri/3, extract_uidset_from_uri/1,
-         split_command_into_components/1, is_tagged_response/2, remove_tag_from_command/3,
+         split_command_into_components/1, is_tagged_response/2, remove_tag_from_response/3,
          header_name/1,
          check_response_for_failure/2,
          ensure_binary/1,
@@ -74,21 +74,21 @@ is_tagged_response(Buffer, Tag) ->
         false -> false
     end.
 
--spec remove_tag_from_command(Buffer :: binary(), Tag :: binary(), Check :: check | trust) -> Command :: binary().
-remove_tag_from_command(Buffer, <<>>, _) ->
+-spec remove_tag_from_response(Buffer :: binary(), Tag :: binary(), Check :: check | trust) -> Command :: binary().
+remove_tag_from_response(Buffer, <<>>, _) ->
     Buffer;
-remove_tag_from_command(Buffer, Tag, check) ->
+remove_tag_from_response(Buffer, Tag, check) ->
     TagSize = size(Tag) + 1, % The extra char is a space
     BufferSize = size(Buffer),
     case TagSize =< BufferSize of
         true ->
-            case Tag =:= binary:part(Buffer, 0, TagSize - 1) of
+            case <<Tag/binary, " ">> =:= binary:part(Buffer, 0, TagSize) of
                 true -> binary:part(Buffer, TagSize, BufferSize - TagSize);
                 false -> Buffer
             end;
         false -> Buffer
     end;
-remove_tag_from_command(Buffer, Tag, trust) ->
+remove_tag_from_response(Buffer, Tag, trust) ->
     TagSize = size(Tag) + 1, % The extra char is a space
     BufferSize = size(Buffer),
     case TagSize =< BufferSize of
@@ -169,6 +169,7 @@ split_imap_uri_domain([ VDomain, ImapHost ]) -> { VDomain, ImapHost }.
 
 ensure_binary(Arg) when is_list(Arg) -> list_to_binary(Arg);
 ensure_binary(Arg) when is_binary(Arg) -> Arg;
+ensure_binary(Arg) when is_atom(Arg) -> atom_to_binary(Arg, latin1);
 ensure_binary(_Arg) -> <<>>.
 
 new_imap_compressors() ->

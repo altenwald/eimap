@@ -25,7 +25,7 @@
 new(_Args) -> <<"CAPABILITY">>.
 
 parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Data, Tag),
-                                      eimap_utils:remove_tag_from_command(Data, Tag, trust)).
+                                      eimap_utils:remove_tag_from_response(Data, Tag, trust)).
 
 
 %% Private API
