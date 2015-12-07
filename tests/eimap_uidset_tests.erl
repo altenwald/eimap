@@ -54,7 +54,7 @@ mix_single_and_range_with_whitespace_test_() ->
         ?_assert(badarg == eimap_uidset:parse(<<"1,3 :5,10,20:  23,30">>))
     ].
 
-bad_uidsets_tests_() ->
+bad_uidsets_test_() ->
     [
         ?_assert(badarg == iterate_uidset(eimap_uidset:parse(<<"-1,3:5">>))),
         ?_assert(badarg == iterate_uidset(eimap_uidset:parse(<<"alpha">>))),

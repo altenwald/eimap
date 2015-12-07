@@ -12,6 +12,9 @@ deps-up: deps
 eimap:
 	ENABLE_STATIC=no rebar compile
 
+test:
+	rebar eunit
+
 run:
 	erl -pa ebin deps/*/ebin
 
