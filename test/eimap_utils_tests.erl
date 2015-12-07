@@ -68,4 +68,54 @@ check_response_for_failure_test_() ->
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:check_response_for_failure(Input, Tag)) | Acc] end, [], Data).
 
+is_tagged_response_test_() ->
+    Tag = <<"abcd">>,
+    Data =
+    [
+       { <<Tag/binary, " Indeed\r\n">>, true },
+       { <<Tag/binary, " Indeed">>, true },
+       { <<"* Yeah baby">>, false }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:is_tagged_response(Input, Tag)) | Acc] end, [], Data).
+
+remove_tag_from_response_test_() ->
+    Tag = <<"abcd">>,
+    Data =
+    [
+       { <<Tag/binary, " Indeed\r\n">>, check, <<"Indeed\r\n">> },
+       { <<Tag/binary, " Indeed\r\n">>, trust, <<"Indeed\r\n">> },
+       { <<Tag/binary, " Indeed">>, check, <<"Indeed">>},
+       { <<Tag/binary, " Indeed">>, trust, <<"Indeed">>},
+       { <<"abcd4 Indeed">>, check, <<"abcd4 Indeed">>},
+       { <<"abcd4 Indeed">>, trust, <<" Indeed">>},
+       { <<"* Yeah baby">>, check, <<"* Yeah baby">> },
+       { <<"">>, check, <<"">> },
+       { <<"">>, trust, <<"">> },
+       { <<>>, check, <<>> },
+       { <<>>, trust, <<>> }
+    ],
+    lists:foldl(fun({ Input, Check, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:remove_tag_from_response(Input, Tag, Check)) | Acc] end, [], Data).
+
+header_name_test_() ->
+    Data =
+    [
+        { mailbox_uid ,  <<"/vendor/cmu/cyrus-imapd/uniqueid">> },
+        { groupware_type ,  <<"X-Kolab-Type">> },
+        { groupware_uid ,  <<"Subject">> },
+        { dunno,  unknown },
+        { "dunno",  unknown },
+        { <<"dunno">>,  unknown },
+        { 134,  unknown }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:header_name(Input)) | Acc] end, [], Data).
+
+ensure_binary_test_() ->
+    Data = 
+    [
+        { "yep", <<"yep">> },
+        { <<"yep">>, <<"yep">> },
+        { [1, 2, 3], <<1, 2, 3>> },
+        { yep, <<"yep">> }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:ensure_binary(Input)) | Acc] end, [], Data).
 
