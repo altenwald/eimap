@@ -33,6 +33,11 @@ parse_test_() ->
           { fini, <<"IMAP4rev1 LITERAL+ ID ENABLE STARTTLS AUTH=PLAIN AUTH=LOGIN SASL-IR">> }
         },
         {
+          <<"other stuff\r\n">>,
+          <<"abcd">>,
+          <<"other stuff\r\n">>
+        },
+        {
           <<"abcd BAD Uh uh uh\r\n">>,
           <<"abcd">>,
           { error, <<"Uh uh uh">> }
