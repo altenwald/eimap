@@ -81,6 +81,17 @@ IMAP Utils
 
 Testing
 =======
+Tests can be run with `make tests` or `rebar eunit`.
+
 All new commands must be accompanied by tests in the test/ directory. Currently
 testing is not remotely complete in coverage (a historical accident), and this
 needs to be rectified over time. New tests welcome.
+
+Contributing
+============
+Maintainer: Aaron Seigo <aseigo@kolabsystems.com>
+Mailing list: devel@lists.kolab.com
+Project page: https://git.kolab.org/tag/eimap/
+
+You can find the list of open tasks on the project page's workboard. Anything
+in the backlog is open to be worked on.
