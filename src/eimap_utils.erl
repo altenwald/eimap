@@ -54,9 +54,12 @@ header_name(_) -> unknown.
 check_response_for_failure(Data, undefined) when is_binary(Data) ->
     check_response_for_failure(Data, <<>>);
 check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
-    NoToken = <<Tag/binary, " NO">>,
+    NoToken = <<Tag/binary, " NO ">>,
     NoTokenLength = byte_size(NoToken),
-    is_no_token_found(Data, Tag, binary:match(Data, NoToken, [ { scope, { 0, NoTokenLength } } ])).
+    case NoTokenLength > byte_size(Data) of
+        true -> tokentoolong;
+        false -> is_no_token_found(Data, Tag, binary:match(Data, NoToken, [ { scope, { 0, NoTokenLength } } ]))
+    end.
 
 -spec split_command_into_components(Buffer :: binary()) -> { Tag :: binary(), Command :: binary(), Data :: binary() }.
 split_command_into_components(Buffer) when is_binary(Buffer) ->
@@ -109,22 +112,34 @@ searched_in_buffer(Buffer, Start, End, nomatch) -> { binary:part(Buffer, Start, 
 searched_in_buffer(Buffer, Start, _End, { MatchStart, MatchLength } ) -> { binary:part(Buffer, Start, MatchStart - Start), MatchStart + MatchLength }.
 
 is_no_token_found(Data, Tag, nomatch) ->
-    BadToken = <<Tag/binary, " BAD">>,
+    BadToken = <<Tag/binary, " BAD ">>,
     BadTokenLength = byte_size(BadToken),
-    is_bad_token_found(Data, Tag, binary:match(Data, BadToken, [ { scope, { 0, BadTokenLength } } ]));
+    case BadTokenLength > byte_size(Data) of
+        true -> tokentoolong;
+        false ->
+            Match = binary:match(Data, BadToken, [ { scope, { 0, BadTokenLength } } ]),
+            is_bad_token_found(Data, Tag, Match)
+    end;
 is_no_token_found(Data, _Tag, { Start, Length }) ->
-    ReasonStart = Start + Length + 1,
-    %% -2 is due to the traling \r\n
-    Reason = binary:part(Data, ReasonStart, byte_size(Data) - ReasonStart - 2),
-    { no, Reason }.
+    ReasonStart = Start + Length,
+    Reason = binary:part(Data, ReasonStart, byte_size(Data) - ReasonStart),
+    { no, chop_newlines(Reason) }.
 
 is_bad_token_found(_Data, _Tag, nomatch) ->
     ok;
 is_bad_token_found(Data, _Tag, { Start, Length }) ->
-    ReasonStart = Start + Length + 1,
+    ReasonStart = Start + Length,
     %% -2 is due to the traling \r\n
-    Reason = binary:part(Data, ReasonStart, byte_size(Data) - ReasonStart - 2),
-    { bad, Reason }.
+    Reason = binary:part(Data, ReasonStart, byte_size(Data) - ReasonStart),
+    { bad, chop_newlines(Reason) }.
+
+chop_newlines(Data) ->
+    Size = size(Data),
+    chop_newline(Data, binary:at(Data, Size - 1), Size - 1).
+
+chop_newline(Data, $\r, Size) -> chop_newline(Data, binary:at(Data, Size - 1), Size - 1);
+chop_newline(Data, $\n, Size) -> chop_newline(Data, binary:at(Data, Size - 1), Size - 1);
+chop_newline(Data, _, Size) -> binary_part(Data, 0, Size + 1).
 
 imap_folder_path_from_parts(none, _HierarchyDelim, none, _Domain, Path) ->
     Path;
