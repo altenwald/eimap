@@ -15,6 +15,5 @@
                    lager
                   ]
   },
-  { mod, { eimap, [] } },
   { env, [ ]}
  ]}.
