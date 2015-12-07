@@ -12,7 +12,7 @@ deps-up: deps
 eimap:
 	ENABLE_STATIC=no rebar compile
 
-test:
+tests:
 	rebar eunit
 
 run:
