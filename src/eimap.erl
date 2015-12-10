@@ -50,8 +50,8 @@
                  inflator, deflator}).
 -record(command, { tag, mbox, message, from, response_token, parse_fun }).
 
--define(SSL_UPGRADE_TIMEOUT, 2000).
--define(TCP_CONNECT_TIMEOUT, 2000).
+-define(SSL_UPGRADE_TIMEOUT, 5000).
+-define(TCP_CONNECT_TIMEOUT, 5000).
 
 %% public API
 start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, ServerConfig, []).
