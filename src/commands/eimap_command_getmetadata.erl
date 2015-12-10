@@ -27,7 +27,6 @@ new({ Folder, Attributes }) when is_list(Folder) -> new({ list_to_binary(Folder)
 new({ Folder, Attributes }) ->
     AttributesList = format_attributes(Attributes, <<>>),
     Command = <<"GETMETADATA (DEPTH infinity) \"", Folder/binary, "\"", AttributesList/binary>>,
-    io:format("Sending ~p~n", [Command]),
     Command.
 
 parse(Data, Tag) -> continue_parse(Data, Tag, { <<>>, [] }).
@@ -35,7 +34,6 @@ parse(Data, Tag) -> continue_parse(Data, Tag, { <<>>, [] }).
 continue_parse(Data, Tag, { LastPartialLine, Acc }) ->
     FullBuffer = <<LastPartialLine/binary, Data/binary>>,
     { FullLinesBuffer, LastPartialLine } = eimap_utils:only_full_lines(FullBuffer),
-    io:format("Metadata response parsing: ~p~n~n", [Data]),
     Lines = binary:split(FullLinesBuffer, <<"\r\n">>, [global]),
     process_line(Tag, LastPartialLine, Lines, Acc).
 
@@ -53,13 +51,16 @@ process_line(Tag, LastPartialLine, [Line|MoreLines], Acc) ->
 formulate_response(ok, Data) -> { fini, Data };
 formulate_response({ _, Reason }, _Data) -> { error, Reason }.
 
-process_metadata_response(Line, Acc) -> io:format("Metadata is back: ~p~n", [Line]), Acc.
+process_metadata_response(<<"* METADATA ", Details/binary>>, Acc) ->
+    Results = parse_folder(Details),
+    [Results|Acc];
+process_metadata_response(_Line, Acc) -> Acc.
 
 format_attributes([], <<>>) -> <<>>;
 format_attributes([], String) -> <<" (", String/binary, ")">>;
 format_attributes([Attribute|Attributes], String) ->
     AttrBin = case is_list(Attribute) of
-                true -> io:format("Chaning up ... ~p~n", [Attribute]), list_to_binary(Attribute);
+                true -> list_to_binary(Attribute);
                 false -> Attribute
               end,
     case String of
@@ -68,3 +69,46 @@ format_attributes([Attribute|Attributes], String) ->
     end;
 format_attributes(_, _String) -> <<>>.
 
+parse_folder(<<"\"", Rest/binary>>) ->
+    { FolderEnd, _ } = binary:match(Rest, <<"\"">>),
+    Folder = binary:part(Rest, 0, FolderEnd - 1),
+    Properties = parse_properties(binary:part(Rest, FolderEnd, size(Rest) - FolderEnd)),
+    { Folder, Properties };
+parse_folder(Buffer) ->
+    { FolderEnd, _ } = binary:match(Buffer, <<" ">>),
+    Folder = binary:part(Buffer, 0, FolderEnd),
+    Properties = parse_properties(binary:part(Buffer, FolderEnd, size(Buffer) - FolderEnd)),
+    { Folder, Properties }.
+
+parse_properties(Buffer) ->
+    { Start, _ } = binary:match(Buffer, <<"(">>),
+    { End, _ } = binary:match(Buffer, <<")">>),
+    Properties = binary:part(Buffer, Start + 1, End - Start - 1),
+    next_property(Properties, []).
+
+next_property(<<>>, Acc) -> Acc;
+next_property(Buffer, Acc) ->
+    { KeyEnd, _ } = binary:match(Buffer, <<" ">>),
+    Key = binary:part(Buffer, 0, KeyEnd),
+    { Value, RemainingBuffer } = next_value(binary:part(Buffer, KeyEnd + 1, size(Buffer) - KeyEnd - 1)),
+    next_property(RemainingBuffer, [{ Key, Value }|Acc]).
+
+next_value(<<"\"", Rest/binary>>) ->
+    until_closing_quote(Rest);
+next_value(Buffer) ->
+    case binary:match(Buffer, <<" ">>) of
+        nomatch -> { Buffer, <<>> };
+        { ValueEnd , _ } -> { binary:part(Buffer, 0, ValueEnd - 1), binary:part(Buffer, ValueEnd, size(Buffer) - ValueEnd) }
+    end.
+
+until_closing_quote(Buffer) -> until_closing_quote(Buffer, 0, binary:at(Buffer, 0), 0, <<>>).
+
+until_closing_quote(Buffer, Start, $\\, Pos, Acc) ->
+    Escaped = binary:at(Buffer, Pos + 1 ),
+    until_closing_quote(Buffer, Start, binary:at(Buffer, Pos + 2), Pos + 2, <<Acc/binary, Escaped>>);
+until_closing_quote(Buffer, Start, $", Pos, Acc) ->
+    { Acc, binary:part(Buffer, Start + Pos + 1, size(Buffer) - Start - Pos - 1) };
+until_closing_quote(Buffer, _Start, Char, Pos, Acc) when Pos =:= size(Buffer) - 1 ->
+    { <<Acc/binary, Char>>, <<>> };
+until_closing_quote(Buffer, Start, Char, Pos, Acc) ->
+    until_closing_quote(Buffer, Start, binary:at(Buffer, Pos + 1), Pos + 1, <<Acc/binary, Char>>).

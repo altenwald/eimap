@@ -23,22 +23,36 @@ parse_test_() ->
     [
         % { Binary Response, Binary Tag, Parsed Results }
         {
-          <<"abcd OK Begin TLS negotiation now\r\n">>,
+          <<"* METADATA Tasks (/shared/vendor/kolab/folder-type \"task\")\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
-          { close_socket, ok }
+          { fini, [ { <<"Tasks">>, [ { <<"/shared/vendor/kolab/folder-type">>, <<"task">> } ] } ] }
+        },
+        {
+          <<"* METADATA Tasks (/shared/vendor/kolab/folder-type \"task \\\"sigh\\\"\")\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"abcd">>,
+          { fini, [ { <<"Tasks">>, [ { <<"/shared/vendor/kolab/folder-type">>, <<"task \"sigh\"">> } ] } ] }
+        },
+        {
+          <<"* METADATA Tasks (/shared/vendor/kolab/folder-type \"task \\\"sigh\\\"\")\r\n* METADATA Archive (/shared/vendor/kolab/folder-type NIL)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"abcd">>,
+          { fini, [
+                    { <<"Archive">>, [ {<<"/shared/vendor/kolab/folder-type">>, <<"NIL">> } ] },
+                    { <<"Tasks">>, [ { <<"/shared/vendor/kolab/folder-type">>, <<"task \"sigh\"">> } ] }
+                  ]
+          }
         },
         {
           <<"abcd BAD Uh uh uh\r\n">>,
           <<"abcd">>,
-          { close_socket, { error, <<"Uh uh uh">> } }
+          { error, <<"Uh uh uh">> }
         },
         {
           <<"abcd NO Uh uh uh\r\n">>,
           <<"abcd">>,
-          { close_socket, { error, <<"Uh uh uh">> } }
+          { error, <<"Uh uh uh">> }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_logout:parse(Response, Tag))|Acc] end, [], Data).
+    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_getmetadata:parse(Response, Tag))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
