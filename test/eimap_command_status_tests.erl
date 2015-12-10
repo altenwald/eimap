@@ -26,6 +26,16 @@ parse_test_() ->
           <<"* STATUS blurdybloop (MESSAGES 231 UIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
           { fini, [{ uidnext, 44292 }, { messages, 231 }] }
+        },
+        {
+          <<"* STATUS blurdybloop (MESSAGES 231 UIDNEXT 44292 RECENT 0 UIDVALIDITY 10110 UNSEEN 10)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"abcd">>,
+          { fini, [{ unseen, 10 }, { uidvalidity, 10110 }, { recent, 0 }, { uidnext, 44292 }, { messages, 231 }] }
+        },
+        {
+          <<"* STATUS blurdybloop (RECENT 1 UIDVALIDITY 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"abcd">>,
+          { fini, [{ uidvalidity, 44292 }, { recent, 1 }] }
         }
     ],
     lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_status:parse(Response, Tag))|Acc] end, [], Data).

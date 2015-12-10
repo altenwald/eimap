@@ -91,6 +91,5 @@ attribute_atom(<<"MESSAGES">>) -> messages;
 attribute_atom(<<"RECENT">>) -> recent;
 attribute_atom(<<"UIDNEXT">>) -> uidnext;
 attribute_atom(<<"UIDVALIDITY">>) -> uidvalidity;
-attribute_atom(<<"UNSEEN">>) -> unseen;
-attribute_atom(What) -> io:format("Missing ~p~n", [What]), <<>>.
+attribute_atom(<<"UNSEEN">>) -> unseen.
 
