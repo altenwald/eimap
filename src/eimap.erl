@@ -31,8 +31,9 @@
          %% commands
          starttls/3,
          capabilities/3,
-         login/5,
+         login/5, logout/3,
          compress/1,
+         get_folder_status/5,
          get_folder_annotations/4,
          get_message_headers_and_body/5,
          get_path_tokens/3]).
@@ -80,10 +81,27 @@ capabilities(PID, From, ResponseToken) when is_pid(PID) ->
                         parse_fun = fun eimap_command_capability:parse/2 },
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
+-spec login(PID :: pid(), From :: pid(), ResponseToken :: any(), User :: list() | binary(), Pass :: list() | binary()) -> ok.
 login(PID, From, ResponseToken, User, Pass) ->
     Command = #command{ message = eimap_command_login:new({ User, Pass }),
                         from = From, response_token = ResponseToken,
                         parse_fun = fun eimap_command_login:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+
+-spec logout(PID :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
+logout(PID, From, ResponseToken) ->
+    Command = #command{ message = eimap_command_logout:new(ok),
+                        from = From, response_token = ResponseToken,
+                        parse_fun = fun eimap_command_logout:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+
+-type status_property() :: messages | recent | uidnext | uidvalidity | unseen.
+-type status_properties() :: [status_property()].
+-spec get_folder_status(PID :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Porperties:: status_properties()) -> ok.
+get_folder_status(PID, From, ResponseToken, Folder, Properties) ->
+    Command = #command{ message = eimap_command_status:new(Folder, Properties),
+                        from = From, response_token = ResponseToken,
+                        parse_fun = fun eimap_command_status:parse/2 },
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 get_folder_annotations(PID, From, ResponseToken, Folder) when is_list(Folder) ->
@@ -329,7 +347,10 @@ next_command_after_response(starttls, State) ->
 next_command_after_response(compression_active, State) ->
     { Inflator, Deflator } = eimap_utils:new_imap_compressors(),
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ inflator = Inflator, deflator = Deflator } }.
+    { next_state, idle, State#state{ inflator = Inflator, deflator = Deflator } };
+next_command_after_response({ close_socket, Response }, State) ->
+    notify_of_response(Response, State#state.current_command),
+    { stop, normal, State }.
 
 tag_field_width(Serial) when Serial < 10000 -> 4;
 tag_field_width(Serial) -> tag_field_width(Serial / 10000, 5).
