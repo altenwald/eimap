@@ -157,3 +157,13 @@ ensure_binary_test_() ->
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:ensure_binary(Input)) | Acc] end, [], Data).
 
+only_full_lines_test_() ->
+    Data = 
+    [
+        { <<"yep">>, { <<>>, <<"yep">> } },
+        { <<"yep\r\nhohoho">>, { <<"yep\r\n">>, <<"hohoho">> } },
+        { <<"nope\r\nyep\r\nhohoho">>, { <<"nope\r\nyep\r\n">>, <<"hohoho">> } },
+        { <<"nope\r\nyep\r\nhohoho\r\n">>, { <<"nope\r\nyep\r\nhohoho\r\n">>, <<>> } }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:only_full_lines(Input)) | Acc] end, [], Data).
+

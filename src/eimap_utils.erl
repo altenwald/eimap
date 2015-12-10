@@ -22,7 +22,8 @@
          header_name/1,
          check_response_for_failure/2,
          ensure_binary/1,
-         new_imap_compressors/0
+         new_imap_compressors/0,
+         only_full_lines/1
         ]).
 
 %% Translate the folder name in to a fully qualified folder path such as it
@@ -178,3 +179,14 @@ new_imap_compressors() ->
     Deflator = zlib:open(),
     ok = zlib:deflateInit(Deflator, 1, deflated, -15, 8, default),
     { Inflator, Deflator }.
+
+-spec only_full_lines(Buffer :: binary()) -> { BufferOfFullLines :: binary(), TrailingFragmentaryLine :: binary() }.
+only_full_lines(Buffer) ->
+    BufferLength = size(Buffer),
+    only_full_lines(Buffer, BufferLength, binary:at(Buffer, BufferLength - 1), BufferLength).
+
+only_full_lines(Buffer, BufferLength, $\n, Pos) when Pos =:= BufferLength -> { Buffer, <<>> };
+only_full_lines(Buffer, BufferLength, $\n, Pos) -> { binary:part(Buffer, 0, Pos + 1), binary:part(Buffer, Pos + 1, BufferLength - Pos - 1) };
+only_full_lines(Buffer, BufferLength, _, 0) -> { <<>>, Buffer };
+only_full_lines(Buffer, BufferLength, _, Pos) -> only_full_lines(Buffer, BufferLength, binary:at(Buffer, Pos - 1), Pos - 1).
+
