@@ -97,9 +97,9 @@ logout(PID, From, ResponseToken) ->
 
 -type status_property() :: messages | recent | uidnext | uidvalidity | unseen.
 -type status_properties() :: [status_property()].
--spec get_folder_status(PID :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Porperties:: status_properties()) -> ok.
+-spec get_folder_status(PID :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: status_properties()) -> ok.
 get_folder_status(PID, From, ResponseToken, Folder, Properties) ->
-    Command = #command{ message = eimap_command_status:new(Folder, Properties),
+    Command = #command{ message = eimap_command_status:new({ Folder, Properties }),
                         from = From, response_token = ResponseToken,
                         parse_fun = fun eimap_command_status:parse/2 },
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
