@@ -36,7 +36,7 @@ parse_test_() ->
           <<"* METADATA Tasks (/shared/vendor/kolab/folder-type \"task \\\"sigh\\\"\")\r\n* METADATA Archive (/shared/vendor/kolab/folder-type NIL)\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
           { fini, [
-                    { <<"Archive">>, [ {<<"/shared/vendor/kolab/folder-type">>, <<"NIL">> } ] },
+                    { <<"Archive">>, [ {<<"/shared/vendor/kolab/folder-type">>, null } ] },
                     { <<"Tasks">>, [ { <<"/shared/vendor/kolab/folder-type">>, <<"task \"sigh\"">> } ] }
                   ]
           }

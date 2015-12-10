@@ -90,7 +90,11 @@ next_property(<<>>, Acc) -> Acc;
 next_property(Buffer, Acc) ->
     { KeyEnd, _ } = binary:match(Buffer, <<" ">>),
     Key = binary:part(Buffer, 0, KeyEnd),
-    { Value, RemainingBuffer } = next_value(binary:part(Buffer, KeyEnd + 1, size(Buffer) - KeyEnd - 1)),
+    { Value, RemainingBuffer } = 
+        case next_value(binary:part(Buffer, KeyEnd + 1, size(Buffer) - KeyEnd - 1)) of
+            { <<"NIL">>, RBuffer } -> { null, RBuffer };
+            Rv -> Rv
+        end,
     next_property(RemainingBuffer, [{ Key, Value }|Acc]).
 
 next_value(<<"\"", Rest/binary>>) ->
