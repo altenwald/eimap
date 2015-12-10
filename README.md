@@ -38,15 +38,46 @@ execution depeding on the current state of the connection.
 Once started, an eimap process may be directed to connect to an imap server
 and then start with functions such as fetching path tokens:
 
-    { ok, Imap } = egara_imap:start_link(ImapServerArgs),
-    egara_imap:connect(Imap),
-    egara_imap:get_path_tokens(Imap, self(), get_path_tokens)
+    ImapServerArgs = #eimap_server_config{ host = "acme.com" },
+    { ok, Imap } = eimap:start_link(ImapServerArgs),
+    eimap_imap:starttls(),
+    eimap_imap:login(Imap, self(), undefined, "username", "password"),
+    eimap_imap:connect(Imap),
+    eimap_imap:get_path_tokens(Imap, self(), get_path_tokens)
 
-In the above code, the get_path_tokens command will be queued and sent to the
-IMAP server only when the connection has been established.
+The eimap_server_config record is defined in eimap.hrl and allows one to set
+host, port and TLS settings. For TLS, the following values are supported:
 
-ImapServerArgs is an eimap_server_config record which is defined in the
-eimap.hrl file.
+    * true: start a TLS session when opening the socket ("implicit TLS")
+    * starttls: start TLS via the STARTTLS IMAP command auomagically
+    * false: just open a regular connection; this is what you usually want, and
+             the client will call eimap:starttls/3 when it wishes to switch to
+             an encrypted connection
+
+The starttls, login and even get_path_tokens commands will be
+queued and sent to the IMAP server only when the connection has been established.
+This prevents having to wait for connection signals and lets you write what you
+intend to be executed with as few issues as possible.
+
+Commands are executed in the order they are queued, and they follow a consistent
+parametic pattern:
+
+    * the first parameter is the eimap PID returned by eimap:start_link/1
+    * the second parameter is the PID the response should be sent to as a message
+    * the third parameter is a token to send back with the response, allowing users
+      of eimap to track responses to specific commands; undefined is allowed and will
+      surpress the use of a response token
+    * .. additional parameters specific to the command, such as username and
+      password in the case of login
+
+Responses are sent as a normal message with the form:
+
+    Response
+    { Token, Resposne }
+
+The Token is the resposne token provided as the third parameter and may be anything.
+The Response depends on the given command, but will be a properly formed Erlang term
+representing the content of the response.
 
 Passthrough Mode
 ================
@@ -63,8 +94,12 @@ for dispatch in the form of { imap_server_response, Data } messages. The receive
 is the PID passed to start_passthrough/2 as the second parameter.
 
 As the user is entirely responsible for the traffic and thereby the state
-of the IMAP conenction during passthrough, exercise all caution while using
+of the IMAP conenction during passthrough, exercise caution while using
 this mode.
+
+Any commands which are queued using eimap's command functions (logini/5,
+logout/3, etc) will interupt passthrough to run those commands. Once the queued
+commands have been cleared passthrough will restart auomatically.
 
 Commands
 ========
@@ -72,12 +107,34 @@ Commands
 Individual commands are implemented in individual modules in the src/commands/
 directory, and this is the prefered mechanism for adding features to eimap.
 
-The API for commands is defined in src/eimap_command.erl as a behavior.
+The API for commands is defined in src/eimap_command.erl as a behavior. Commands
+are expected to provide at least two functions:
 
+    new(Args): create a command bitstring to be passed to the imap server
+               Args is specific to the command, and some commands ignore this
+               parameter
+    parse(Data, Tag): parses a response from the imap server; the Tag is the
+               IMAP command tag sent with the command and Data is the full
+               Data buffer being process (possibly including tagged lines).
+
+Data to be parsed may contain multiple lines, and in the case of commands with
+large responses may only contain part of the response.
+
+In the case of partial responses, parse/2 may return { more, fun/3, State }.
+The State object allows preserving the parsing state and will be passed back to
+fun/3 in addition to the Data and Tag parameters.
+
+parse/2 (or the continuation fun/3) should return { fini, Result } when 
+successfully completed, or { error, Reason } when it fails. Only once either a
+fini or error tuple are returned will the eimap process move on to the next
+command queued.
 
 IMAP Utils
 ==========
 
+eimap_utils provides a set of handy helpers for use when IMAP'ing your way
+across the network. These include folder path and UID set extractors, IMAP
+server response manipulators and misc utilities.
 
 Testing
 =======
