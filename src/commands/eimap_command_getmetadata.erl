@@ -17,7 +17,7 @@
 
 -module(eimap_command_getmetadata).
 -behavior(eimap_command).
--export([new/1, parse/2]).
+-export([new/1, parse/2, continue_parse/3]).
 
 %% http://tools.ietf.org/html/rfc2342
 
@@ -30,22 +30,24 @@ new({ Folder, Attributes }) ->
     io:format("Sending ~p~n", [Command]),
     Command.
 
-parse(Data, Tag) -> continue_parse(Data, Tag, []).
+parse(Data, Tag) -> continue_parse(Data, Tag, { <<>>, [] }).
 
-continue_parse(Data, Tag, Acc) ->
+continue_parse(Data, Tag, { LastPartialLine, Acc }) ->
+    FullBuffer = <<LastPartialLine/binary, Data/binary>>,
+    { FullLinesBuffer, LastPartialLine } = eimap_utils:only_full_lines(FullBuffer),
     io:format("Metadata response parsing: ~p~n~n", [Data]),
-    Lines = binary:split(Data, <<"\r\n">>, [global]),
-    process_line(Tag, Lines, Acc).
+    Lines = binary:split(FullLinesBuffer, <<"\r\n">>, [global]),
+    process_line(Tag, LastPartialLine, Lines, Acc).
 
 
 %% Private API
-process_line(_Tag, [], Acc) -> { more, fun ?MODULE:continue_parse/3, Acc };
-process_line(Tag, [Line|MoreLines], Acc) ->
+process_line(_Tag, LastPartialLine, [], Acc) -> { more, fun ?MODULE:continue_parse/3, { LastPartialLine, Acc } };
+process_line(Tag, LastPartialLine, [Line|MoreLines], Acc) ->
     case eimap_utils:is_tagged_response(Line, Tag) of
         true ->
             formulate_response(eimap_utils:check_response_for_failure(Line, Tag), Acc);
         false ->
-            process_line(Tag, MoreLines, process_metadata_response(Line, Acc))
+            process_line(Tag, LastPartialLine, MoreLines, process_metadata_response(Line, Acc))
     end.
 
 formulate_response(ok, Data) -> { fini, Data };
@@ -64,5 +66,5 @@ format_attributes([Attribute|Attributes], String) ->
         <<>> -> format_attributes(Attributes, AttrBin);
         _ -> format_attributes(Attributes, <<String/binary, " ", AttrBin/binary>>)
     end;
-format_attributes(_, String) -> <<>>.
+format_attributes(_, _String) -> <<>>.
 
