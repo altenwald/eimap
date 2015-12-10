@@ -33,7 +33,9 @@
          capabilities/3,
          login/5, logout/3,
          compress/1,
+         get_server_metadata/4,
          get_folder_status/5,
+         get_folder_metadata/5,
          get_folder_annotations/4,
          get_message_headers_and_body/5,
          get_path_tokens/3]).
@@ -102,6 +104,20 @@ get_folder_status(PID, From, ResponseToken, Folder, Properties) ->
     Command = #command{ message = eimap_command_status:new({ Folder, Properties }),
                         from = From, response_token = ResponseToken,
                         parse_fun = fun eimap_command_status:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+
+-spec get_folder_metadata(PID :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: [list() | binary()]) -> ok.
+get_folder_metadata(PID, From, ResponseToken, Folder, Properties) ->
+    Command = #command{ message = eimap_command_getmetadata:new({ Folder, Properties}),
+                        from = From, response_token = ResponseToken,
+                        parse_fun = fun eimap_command_getmetadata:parse/2 },
+    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+
+-spec get_server_metadata(PID :: pid(), From :: pid(), ResponseToken :: any(), Properties:: [list() | binary()]) -> ok.
+get_server_metadata(PID, From, ResponseToken, Properties) ->
+    Command = #command{ message = eimap_command_getmetadata:new({ <<>>, Properties}),
+                        from = From, response_token = ResponseToken,
+                        parse_fun = fun eimap_command_getmetadata:parse/2 },
     gen_fsm:send_all_state_event(PID, { ready_command, Command }).
 
 get_folder_annotations(PID, From, ResponseToken, Folder) when is_list(Folder) ->
