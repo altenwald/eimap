@@ -70,9 +70,8 @@ format_attributes([Attribute|Attributes], String) ->
 format_attributes(_, _String) -> <<>>.
 
 parse_folder(<<"\"", Rest/binary>>) ->
-    { FolderEnd, _ } = binary:match(Rest, <<"\"">>),
-    Folder = binary:part(Rest, 0, FolderEnd - 1),
-    Properties = parse_properties(binary:part(Rest, FolderEnd, size(Rest) - FolderEnd)),
+    { Folder, RemainingBuffer } = until_closing_quote(Rest),
+    Properties = parse_properties(RemainingBuffer),
     { Folder, Properties };
 parse_folder(Buffer) ->
     { FolderEnd, _ } = binary:match(Buffer, <<" ">>),
