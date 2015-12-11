@@ -45,7 +45,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% state record definition
--record(state, { host, port, tls, tls_state = false, socket,
+-record(state, { host, port, tls, tls_state = false, socket, server_id = <<>>,
                  command_serial = 1, command_queue = queue:new(),
                  current_command, current_mbox, parse_state,
                  passthrough = false, passthrough_recv, passthrough_send_buffer = <<>>,
@@ -54,6 +54,16 @@
 
 -define(SSL_UPGRADE_TIMEOUT, 5000).
 -define(TCP_CONNECT_TIMEOUT, 5000).
+
+-export([test/0]).
+test() ->
+    ServerConfig = #eimap_server_config{ host = "192.168.56.101", port = 143, tls = false },
+    { ok, Conn } = start_link(ServerConfig),
+    login(Conn, self(), undefined, "doe", "doe"),
+    get_folder_metadata(Conn, self(), undefined, "*", ["/shared/vendor/kolab/folder-type"]),
+    logout(Conn, self(), undefined),
+    connect(Conn).
+
 
 %% public API
 start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, ServerConfig, []).
@@ -282,7 +292,7 @@ handle_info({ tcp_closed, Socket }, _StateName, #state{ socket = Socket, host = 
 handle_info({ tcp_error, Socket, _Reason }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
     lager:info("~p Disconnected due to socket error from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
-handle_info({ { connected, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ passthrough = Passthrough, passthrough_recv = PassthroughReceiver, tls = TLS } = State) ->
+handle_info({ { connected, Receiver, ResponseToken }, { Capabilities, ServerID } }, _StateName, #state{ passthrough = Passthrough, passthrough_recv = PassthroughReceiver, tls = TLS } = State) ->
     case TLS of
         starttls ->
             % we do not pass through or notifty when we are going to automatically do a starttls
@@ -294,14 +304,12 @@ handle_info({ { connected, Receiver, ResponseToken }, Capabilities }, _StateName
             % explicitly
             ok;
         _ ->
-            %lager:debug("Connected, capabilities are: ~s", [Capabilities]),
-            %% TODO: capture and use the actual "server hello" string with server version, etc.
-            send_hello_string(Capabilities, <<>>, <<>>, Receiver, ResponseToken, Passthrough, PassthroughReceiver)
+            %lager:debug("Connected, capabilities are: ~s; ServerID is ~s", [Capabilities, ServerID]),
+            send_hello_string(Capabilities, ServerID, Receiver, ResponseToken, Passthrough, PassthroughReceiver)
     end,
-    { next_state, idle, State#state{ parse_state = none } };
-handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
-    %% TODO: capture and use the actual "server hello" string with server version, etc.
-    send_hello_string(Capabilities, <<>>, <<>>, Receiver, ResponseToken, Passthrough, PassthroughReceiver),
+    { next_state, idle, State#state{ parse_state = none, server_id = ServerID } };
+handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ server_id = ServerID, passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
+    send_hello_string(Capabilities, ServerID, Receiver, ResponseToken, Passthrough, PassthroughReceiver),
     { next_state, idle, State#state{ parse_state = none } };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
@@ -322,8 +330,8 @@ terminate(_Reason, _Statename, State) -> close_socket(State), ok.
 code_change(_OldVsn, Statename, State, _Extra) -> { ok, Statename, State }.
 
 %% private API
-send_hello_string(Capabilities, Hostname, ServerId, Receiver, ResponseToken, Passthrough, PassthroughReceiver) ->
-    Message = <<"* OK [CAPABILITY ", Capabilities/binary, "] ", Hostname/binary, " ", ServerId/binary, " server ready\r\n">>,
+send_hello_string(Capabilities, ServerId, Receiver, ResponseToken, Passthrough, PassthroughReceiver) ->
+    Message = <<"* OK [CAPABILITY ", Capabilities/binary, "] ", ServerId/binary, "\r\n">>,
     notify_of_response(Message, Receiver, ResponseToken),
     passthrough_capabilities(Message, Passthrough, PassthroughReceiver).
 
@@ -388,7 +396,7 @@ create_socket(Host, Port, starttls, Receiver, ResponseToken, CommandQueue) ->
     % note the use of queue:in_r to _prepend_ the commands so they get run first even if the user
     % has pre-connection queued up commands
     NewCommandQueue = queue:in_r(TlsCommand, queue:in_r(CapabilitiesCommand, CommandQueue)),
-    { gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT), false, undefined, NewCommandQueue };
+    { gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT), false, self(), NewCommandQueue };
 create_socket(Host, Port, _, _Receiver, _ResponseToken, CommandQueue) ->
     { gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT), false, self(), CommandQueue }.
 

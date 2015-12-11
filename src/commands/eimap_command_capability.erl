@@ -34,8 +34,10 @@ parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Dat
 formulate_reponse(ok, <<"* OK [CAPABILITY ", Data/binary>>) ->
     % this is a server response on connect
     { End, _ } = binary:match(Data, <<"]">>),
+    { TextEnd, _ } = binary:match(Data, <<"\r\n">>),
     Capabilities = binary:part(Data, { 0, End }),
-    { fini, Capabilities };
+    ServerID = binary:part(Data, { End + 2, TextEnd - End  - 2}),
+    { fini, { Capabilities, ServerID } };
 formulate_reponse(ok, <<"* CAPABILITY ", Data/binary>>) ->
     { End, _ } = binary:match(Data, <<"\r\n">>),
     Capabilities = binary:part(Data, { 0, End }),

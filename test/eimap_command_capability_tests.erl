@@ -25,7 +25,7 @@ parse_test_() ->
         {
           <<"* OK [CAPABILITY IMAP4rev1 LITERAL+ ID ENABLE STARTTLS LOGINDISABLED] acme.com Cyrus IMAP 2.5.5.5-Kolab-2.5.5-5.1.el6.kolab_14 server ready\r\n">>,
           <<>>,
-          { fini, <<"IMAP4rev1 LITERAL+ ID ENABLE STARTTLS LOGINDISABLED">> }
+          { fini, { <<"IMAP4rev1 LITERAL+ ID ENABLE STARTTLS LOGINDISABLED">>, <<"acme.com Cyrus IMAP 2.5.5.5-Kolab-2.5.5-5.1.el6.kolab_14 server ready">> } }
         },
         {
           <<"* CAPABILITY IMAP4rev1 LITERAL+ ID ENABLE STARTTLS AUTH=PLAIN AUTH=LOGIN SASL-IR\r\nabcd OK CAPABILITY COMPLETED\r\n">>,
