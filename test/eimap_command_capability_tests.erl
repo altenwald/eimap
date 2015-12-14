@@ -55,7 +55,7 @@ parse_test_() ->
     ],
     lists:foldl(fun({ InitArgs, Response, Tag, Parsed }, Acc) ->
                         { _Command, ResponseType } = eimap_command_capability:new_command(InitArgs),
-                        [?_assertEqual(Parsed, eimap_command:do_parse(ResponseType, Response, Tag, eimap_command_capability))|Acc] end, [], Data).
+                        [?_assertEqual(Parsed, eimap_command:parse_response(ResponseType, Response, Tag, eimap_command_capability))|Acc] end, [], Data).
 
 new_test_() ->
     Data =

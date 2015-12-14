@@ -56,7 +56,7 @@ parse_test_() ->
         }
     ],
     { _Command, ResponseType } = eimap_command_annotation:new_command(<<"/my/folder">>),
-    lists:foldl(fun({ Tag, ServerData, Expected }, Acc) -> [?_assertEqual(Expected, eimap_command:do_parse(ResponseType, ServerData, Tag, eimap_command_annotation))|Acc] end, [], Data).
+    lists:foldl(fun({ Tag, ServerData, Expected }, Acc) -> [?_assertEqual(Expected, eimap_command:parse_response(ResponseType, ServerData, Tag, eimap_command_annotation))|Acc] end, [], Data).
 
 new_test_() ->
     Data =

@@ -1,6 +1,6 @@
 -module(eimap_command).
 
--export([do_parse/4, formulate_response/2]).
+-export([parse_response/4, formulate_response/2]).
 
 -type more_tuple() :: { more, ParseContinuation :: parse_continuation(), State :: term }.
 -type finished_tuple() :: { fini, Results :: term }.
@@ -14,10 +14,10 @@
 %-callback process_line(Data :: binary(), Acc :: any()) ->
 %    more_tuple() | finished_tuple() | error_tuple() | starttls.
 
-do_parse(multiline_response, Data, Tag, ParseState) -> multiline_parse(Data, Tag, ParseState);
-do_parse(single_line_response, Data, Tag, Module) -> Module:formulate_response(Data, Tag);
-do_parse(blob_response, Data, Tag, { Continuation, ParseState }) -> Continuation(Data, Tag, ParseState);
-do_parse(blob_response, Data, Tag, Module) ->
+parse_response(multiline_response, Data, Tag, ParseState) -> multiline_parse(Data, Tag, ParseState);
+parse_response(single_line_response, Data, Tag, Module) -> Module:formulate_response(Data, Tag);
+parse_response(blob_response, Data, Tag, { Continuation, ParseState }) -> Continuation(Data, Tag, ParseState);
+parse_response(blob_response, Data, Tag, Module) ->
     case Module:parse(Data, Tag) of
         { more, Continuation, ParseState } -> { more, { Continuation, ParseState } };
         Response -> Response

@@ -192,7 +192,7 @@ wait_response({ data, _Data }, #state{ current_command = #command{ parse_state =
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State };
 wait_response({ data, Data }, #state{ current_command = #command{ response_type = ResponseType, parse_state = CommandState , tag = Tag } } = State) ->
-    Response = eimap_command:do_parse(ResponseType, Data, Tag, CommandState),
+    Response = eimap_command:parse_response(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
     next_command_after_response(Response, State).
 
@@ -201,7 +201,7 @@ startingtls({ passthrough, Data }, #state{ passthrough = true, passthrough_send_
 startingtls(Command, State) when is_record(Command, command) ->
     { next_state, startingtls, enque_command(Command, State) };
 startingtls({ data, Data }, #state{ current_command = #command{ response_type = ResponseType, parse_state = CommandState, tag = Tag } } = State) ->
-    Response = eimap_command:do_parse(ResponseType, Data, Tag, CommandState),
+    Response = eimap_command:parse_response(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
     next_command_after_response(Response, State).
 

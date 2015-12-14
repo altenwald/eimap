@@ -38,7 +38,7 @@ parse_test_() ->
           { fini, [{ uidvalidity, 44292 }, { recent, 1 }] }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command:do_parse(multiline_response, Response, Tag, eimap_command_status))|Acc] end, [], Data).
+    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command:parse_response(multiline_response, Response, Tag, eimap_command_status))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
