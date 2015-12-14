@@ -38,15 +38,15 @@ parse_test_() ->
           { close_socket, { error, <<"Uh uh uh">> } }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_logout:parse(Response, Tag))|Acc] end, [], Data).
+    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command:parse_response(multiline_response, Response, Tag, eimap_command_logout))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
     [
         % input, output
-        { <<>>, <<"LOGOUT">> },
-        { true, <<"LOGOUT">> },
-        { [], <<"LOGOUT">> }
+        { <<>>, { <<"LOGOUT">>, multiline_response } },
+        { true, { <<"LOGOUT">>, multiline_response } },
+        { [], { <<"LOGOUT">>, multiline_response } }
     ],
-    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_logout:new(Params))|Acc] end, [], Data).
+    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_logout:new_command(Params))|Acc] end, [], Data).
 

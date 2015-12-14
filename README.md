@@ -110,15 +110,46 @@ directory, and this is the prefered mechanism for adding features to eimap.
 The API for commands is defined in src/eimap_command.erl as a behavior. Commands
 are expected to provide at least two functions:
 
-    new(Args): create a command bitstring to be passed to the imap server
-               Args is specific to the command, and some commands ignore this
-               parameter
-    parse(Data, Tag): parses a response from the imap server; the Tag is the
-               IMAP command tag sent with the command and Data is the full
-               Data buffer being process (possibly including tagged lines).
+    new_command(Args) -> { Command, ResponseType }
+        create a command bitstring to be passed to the imap server and defines
+        the type of response for this command. Response types include
+        single_line_response, multiline_response and blob_response.
 
-Data to be parsed may contain multiple lines, and in the case of commands with
-large responses may only contain part of the response.
+        Args is specific to the command, and some commands
+        ignore this parameter
+
+Single line response
+--------------------
+Commands which the IMAP server will respond to with a single line in return
+should use single_line_response and must implement formulate_response/2 which
+is passed the Data and the command Tag. This usually returns one of
+{ fini, Result } or { error, Reason }, though some special commands may return
+atoms which the eimap module responds to such as starttls.
+
+Multiline Response
+------------------
+This is the most common response type and is used when the IMAP server may
+respond with zero or more untagged responses and a final tagged response.
+
+Such commands must implement:
+
+    process_line/2 which is passed one line at a time (minus newlines)
+        and a list accumulator to add responses to
+
+    formulate_response/2 which is passed ok on success or an error tuple of 
+     { [no|bad], Reason }. This should return either { fini, Response } or
+     { error, Reason } in most cases; and for that there is
+     eimap_command:formulate_response. Which means that for most commands
+     formulate_response/2 is implemented as:
+
+        formulate_response(Result, Response) -> eimap_command:formulate(Result, Response).
+
+Unstructured (blob) responses
+-----------------------------
+Responses that do not follow the usual untagged/tagged line response pattern
+may use the blog_response type and implement parse/2 which will be passed
+the data as it arrives. The command is responsible for all buffer stitching
+across network packets, etc.
 
 In the case of partial responses, parse/2 may return { more, fun/3, State }.
 The State object allows preserving the parsing state and will be passed back to
@@ -140,9 +171,7 @@ Testing
 =======
 Tests can be run with `make tests` or `rebar eunit`.
 
-All new commands must be accompanied by tests in the test/ directory. Currently
-testing is not remotely complete in coverage (a historical accident), and this
-needs to be rectified over time. New tests welcome.
+All new commands must be accompanied by tests in the test/ directory.
 
 Contributing
 ============
