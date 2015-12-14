@@ -47,23 +47,13 @@
 %% state record definition
 -record(state, { host, port, tls, tls_state = false, socket, server_id = <<>>,
                  command_serial = 1, command_queue = queue:new(),
-                 current_command, current_mbox, parse_state,
+                 current_command, current_mbox,
                  passthrough = false, passthrough_recv, passthrough_send_buffer = <<>>,
                  inflator, deflator}).
--record(command, { tag, mbox, message, from, response_token, parse_fun }).
+-record(command, { tag, mbox, message, from, response_type, response_token, parse_state }).
 
 -define(SSL_UPGRADE_TIMEOUT, 5000).
 -define(TCP_CONNECT_TIMEOUT, 5000).
-
--export([test/0]).
-test() ->
-    ServerConfig = #eimap_server_config{ host = "192.168.56.101", port = 143, tls = false },
-    { ok, Conn } = start_link(ServerConfig),
-    login(Conn, self(), undefined, "doe", "doe"),
-    get_folder_metadata(Conn, self(), undefined, "*", ["/shared/vendor/kolab/folder-type"]),
-    logout(Conn, self(), undefined),
-    connect(Conn).
-
 
 %% public API
 start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, ServerConfig, []).
