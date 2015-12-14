@@ -17,37 +17,23 @@
 
 -module(eimap_command_annotation).
 -behavior(eimap_command).
--export([new/1, parse/2]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% Public API
-new(Folder) when is_binary(Folder) ->
-    <<"GETANNOTATION \"", Folder/binary, "\" \"*\" \"value.shared\"">>.
+new_command(Folder) when is_list(Folder) -> new_command(list_to_binary(Folder));
+new_command(Folder) -> { <<"GETANNOTATION \"", Folder/binary, "\" \"*\" \"value.shared\"">>, multiline_response }.
 
-parse(Data, Tag) when is_binary(Data) ->
-    case eimap_utils:check_response_for_failure(Data, Tag) of
-        ok ->
-            Lines = binary:split(Data, <<"\r\n">>, [global]),
-            Rv = lists:foldl(fun(Line, Acc) -> parseLine(Line, Acc, Tag) end, [], Lines),
-            { fini, Rv };
-        { _, Reason } ->
-            { error, Reason }
-    end.
-
-
-%% Private API
-parseLine(<<" ", Data/binary>>, Acc, Tag) ->
-    parseLine(Data, Acc, Tag);
-parseLine(<<"* ANNOTATION ", Data/binary>>, Acc, _Tag) ->
+process_line(<<" ", Data/binary>>, Acc) ->
+    process_line(Data, Acc);
+process_line(<<"* ANNOTATION ", Data/binary>>, Acc) ->
     Pieces = binary:split(Data, <<"\"">>, [global]),
     process_pieces(Pieces, Acc);
-parseLine(<<>>, Acc, _Tag) ->
-    Acc;
-parseLine(Data, Acc, Tag) ->
-    case binary:match(Data, Tag) of
-        { 0, End } -> handle_possible_end(binary:part(Data, End + 1, byte_size(Data) - End - 1), Acc);
-        _ -> lager:warning("Unexpected response from imap server: ~p", [Data]), Acc
-    end.
+process_line(<<>>, Acc) ->
+    Acc.
 
+formulate_response(Result, Data) -> eimap_command:formulate_response(Result, Data).
+
+%% Private API
 process_pieces([MBox, Key, _, _, _, Value, _], Acc) when MBox =/= <<>> -> [ { Key, translate(Value) } | Acc ];
 process_pieces([_, _MBox, _, Key, _, _, _, Value, _], Acc) -> [ { Key, translate(Value) } | Acc ];
 process_pieces(_, Acc) -> Acc.
@@ -61,16 +47,3 @@ translate(Value) ->
         _:_ -> Value
     end.
 
-handle_possible_end(<<"OK", _/binary>>, Acc) ->
-    Acc;
-handle_possible_end(<<"NO ", Reason/binary>>, Acc) ->
-    lager:warning("Annotation error from imap server: ~p", [Reason]),
-    Acc;
-handle_possible_end(<<"BAD ", Reason/binary>>, Acc) ->
-    lager:warning("Annotation error from imap server: ~p", [Reason]),
-    Acc;
-handle_possible_end([_Tag, Message], Acc) ->
-    handle_possible_end(Message, Acc);
-handle_possible_end(Message, Acc) ->
-    lager:warning("Unexpected response from imap server: ~p", [Message]),
-    Acc.

@@ -17,17 +17,16 @@
 
 -module(eimap_command_compress).
 -behavior(eimap_command).
--export([new/1, parse/2]).
+-export([new_command/1, formulate_response/2]).
 
 %% http://tools.ietf.org/html/rfc2342
 
 %% Public API
-new(_Args) -> <<"COMPRESS DEFLATE">>.
+new_command(_Args) -> { <<"COMPRESS DEFLATE">>, single_line_response }.
 
-parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Data, Tag)).
-
-
-%% Private API
-formulate_reponse(ok) -> compression_active;
-formulate_reponse({ _, Reason }) -> { error, Reason }.
+formulate_response(Data, Tag) ->
+    case eimap_utils:check_response_for_failure(Data, Tag) of
+        ok -> compression_active;
+        { _, Reason } -> { error, Reason }
+    end.
 

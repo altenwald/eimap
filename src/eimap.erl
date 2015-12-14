@@ -37,7 +37,7 @@
          get_folder_status/5,
          get_folder_metadata/5,
          get_folder_annotations/4,
-         get_message_headers_and_body/5,
+         peek_message_headers_and_body/5,
          get_path_tokens/3]).
 
 %% gen_fsm callbacks
@@ -65,81 +65,51 @@ connect(PID) -> connect(PID, undefined, undefined).
 connect(PID, From, ResponseToken) -> gen_fsm:send_all_state_event(PID, { connect, From, ResponseToken }).
 disconnect(PID) -> gen_fsm:send_all_state_event(PID, disconnect).
 
-compress(PID) when is_pid(PID) ->
-    Command = #command{ message = eimap_command_compress:new(ok),
-                        from = PID, response_token = compress,
-                        parse_fun = fun eimap_command_compress:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec compress(EImap :: pid()) -> ok.
+compress(EImap) when is_pid(EImap) ->
+    send_command_to_queue(EImap, EImap, compress, eimap_command_compress, ok).
 
-starttls(PID, From, ResponseToken) when is_pid(PID) ->
-    Command = #command{ message = eimap_command_starttls:new(ok),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_starttls:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec starttls(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
+starttls(EImap, From, ResponseToken) when is_pid(EImap) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_starttls, ok).
 
-capabilities(PID, From, ResponseToken) when is_pid(PID) ->
-    Command = #command{ message = eimap_command_capability:new(noparams),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_capability:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec capabilities(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
+capabilities(EImap, From, ResponseToken) when is_pid(EImap) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_capability, ok).
 
--spec login(PID :: pid(), From :: pid(), ResponseToken :: any(), User :: list() | binary(), Pass :: list() | binary()) -> ok.
-login(PID, From, ResponseToken, User, Pass) ->
-    Command = #command{ message = eimap_command_login:new({ User, Pass }),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_login:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec login(EImap :: pid(), From :: pid(), ResponseToken :: any(), User :: list() | binary(), Pass :: list() | binary()) -> ok.
+login(EImap, From, ResponseToken, User, Pass) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_login, { User, Pass }).
 
--spec logout(PID :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
-logout(PID, From, ResponseToken) ->
-    Command = #command{ message = eimap_command_logout:new(ok),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_logout:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec logout(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
+logout(EImap, From, ResponseToken) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_logout, ok).
 
 -type status_property() :: messages | recent | uidnext | uidvalidity | unseen.
 -type status_properties() :: [status_property()].
--spec get_folder_status(PID :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: status_properties()) -> ok.
-get_folder_status(PID, From, ResponseToken, Folder, Properties) ->
-    Command = #command{ message = eimap_command_status:new({ Folder, Properties }),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_status:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec get_folder_status(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: status_properties()) -> ok.
+get_folder_status(EImap, From, ResponseToken, Folder, Properties) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_status, { Folder, Properties }).
 
--spec get_folder_metadata(PID :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: [list() | binary()]) -> ok.
-get_folder_metadata(PID, From, ResponseToken, Folder, Properties) ->
-    Command = #command{ message = eimap_command_getmetadata:new({ Folder, Properties}),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_getmetadata:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec get_folder_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: [list() | binary()]) -> ok.
+get_folder_metadata(EImap, From, ResponseToken, Folder, Properties) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { Folder, Properties }).
 
--spec get_server_metadata(PID :: pid(), From :: pid(), ResponseToken :: any(), Properties:: [list() | binary()]) -> ok.
-get_server_metadata(PID, From, ResponseToken, Properties) ->
-    Command = #command{ message = eimap_command_getmetadata:new({ <<>>, Properties}),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_getmetadata:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec get_server_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Properties:: [list() | binary()]) -> ok.
+get_server_metadata(EImap, From, ResponseToken, Properties) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { <<>>, Properties }).
 
-get_folder_annotations(PID, From, ResponseToken, Folder) when is_list(Folder) ->
-    get_folder_annotations(PID, From, ResponseToken, list_to_binary(Folder));
-get_folder_annotations(PID, From, ResponseToken, Folder) when is_binary(Folder) ->
-    Command = #command{ message = eimap_command_annotation:new(Folder),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_annotation:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec get_folder_annotations(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: [list() | binary()]) -> ok.
+get_folder_annotations(EImap, From, ResponseToken, Folder) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_annotation, Folder).
 
-get_message_headers_and_body(PID, From, ResponseToken, Folder, MessageID) ->
-    %%lager:info("SELECT_DEBUG: peeking message ~p ~p", [Folder, MessageID]),
-    Command = #command{ mbox = Folder, message = eimap_command_peek_message:new(MessageID),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_peek_message:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec peek_message_headers_and_body(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: [list() | binary()], MessageID :: [integer() | binary()]) -> ok.
+peek_message_headers_and_body(EImap, From, ResponseToken, Folder, MessageID) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_peek_message, MessageID, Folder).
 
-get_path_tokens(PID, From, ResponseToken) ->
-    Command = #command{ message = eimap_command_namespace:new([]),
-                        from = From, response_token = ResponseToken,
-                        parse_fun = fun eimap_command_namespace:parse/2 },
-    gen_fsm:send_all_state_event(PID, { ready_command, Command }).
+-spec get_path_tokens(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
+get_path_tokens(EImap, From, ResponseToken) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_namespace, ok).
 
 %% gen_server API
 init(#eimap_server_config{ host = Host, port = Port, tls = TLS }) ->
@@ -153,9 +123,10 @@ disconnected(stop_passthrough, State) ->
 disconnected({ connect, Receiver, ResponseToken }, #state{ command_queue = CommandQueue, host = Host, port = Port, tls = TLS, socket = undefined } = State) ->
     %lager:debug("CONNECTING! ~p ~p", [Receiver, ResponseToken]),
     { {ok, Socket}, TlsState, SendCapabilitiesTo, NewCommandQueue } = create_socket(Host, Port, TLS, Receiver, ResponseToken, CommandQueue),
-    Command = #command{ message = eimap_command_capability:new([]),
+    { Message, ResponseType } = eimap_command_capability:new_command(parse_serverid),
+    Command = #command{ message = Message, response_type = ResponseType,
                         from = SendCapabilitiesTo, response_token = { connected, Receiver, ResponseToken },
-                        parse_fun = fun eimap_command_capability:parse/2 },
+                        parse_state = eimap_command_capability },
     { next_state, wait_response, State#state { socket = Socket, tls_state = TlsState, current_command = Command, command_queue = NewCommandQueue } };
 disconnected(Command, State) when is_record(Command, command) ->
     { next_state, disconnected, enque_command(Command, State) }.
@@ -217,15 +188,11 @@ next_state_after_emptied_queue(_State) ->
 %%TODO a variant that checks "#command{ from = undefined }" to avoid parsing responses which will go undelivered?
 wait_response(Command, State) when is_record(Command, command) ->
     { next_state, wait_response, enque_command(Command, State) };
-wait_response({ data, _Data }, #state{ current_command = #command{ parse_fun = undefined } } = State) ->
+wait_response({ data, _Data }, #state{ current_command = #command{ parse_state = undefined } } = State) ->
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, State };
-wait_response({ data, Data }, #state{ current_command = #command{ parse_fun = Fun, tag = Tag } } = State) when is_function(Fun, 2) ->
-    Response = Fun(Data, Tag),
-    %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
-    next_command_after_response(Response, State);
-wait_response({ data, Data }, #state{ parse_state = ParseState, current_command = #command{ parse_fun = Fun, tag = Tag } } = State) when is_function(Fun, 3) ->
-    Response = Fun(Data, Tag, ParseState),
+wait_response({ data, Data }, #state{ current_command = #command{ response_type = ResponseType, parse_state = CommandState , tag = Tag } } = State) ->
+    Response = eimap_command:do_parse(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
     next_command_after_response(Response, State).
 
@@ -233,8 +200,8 @@ startingtls({ passthrough, Data }, #state{ passthrough = true, passthrough_send_
     { next_state, startingtls, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
 startingtls(Command, State) when is_record(Command, command) ->
     { next_state, startingtls, enque_command(Command, State) };
-startingtls({ data, Data }, #state{ current_command = #command{ parse_fun = Fun, tag = Tag } } = State) when is_function(Fun, 2) ->
-    Response = Fun(Data, Tag),
+startingtls({ data, Data }, #state{ current_command = #command{ response_type = ResponseType, parse_state = CommandState, tag = Tag } } = State) ->
+    Response = eimap_command:do_parse(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
     next_command_after_response(Response, State).
 
@@ -297,7 +264,7 @@ handle_info({ { connected, Receiver, ResponseToken }, { Capabilities, ServerID }
             %lager:debug("Connected, capabilities are: ~s; ServerID is ~s", [Capabilities, ServerID]),
             send_hello_string(Capabilities, ServerID, Receiver, ResponseToken, Passthrough, PassthroughReceiver)
     end,
-    { next_state, idle, State#state{ parse_state = none, server_id = ServerID } };
+    { next_state, idle, State#state{ current_command = undefined, server_id = ServerID } };
 handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ server_id = ServerID, passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
     OurCapabilities =
         case binary:match(Capabilities, <<"STARTTLS">>) of
@@ -305,7 +272,7 @@ handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities },
             _ -> Capabilities
         end,
     send_hello_string(OurCapabilities, ServerID, Receiver, ResponseToken, Passthrough, PassthroughReceiver),
-    { next_state, idle, State#state{ parse_state = none } };
+    { next_state, idle, State#state{ current_command = none } };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
     { next_state, StateName, State#state{ current_mbox = MBox } };
@@ -325,6 +292,15 @@ terminate(_Reason, _Statename, State) -> close_socket(State), ok.
 code_change(_OldVsn, Statename, State, _Extra) -> { ok, Statename, State }.
 
 %% private API
+send_command_to_queue(EImap, From, ResponseToken, Module, Args) ->
+    send_command_to_queue(EImap, From, ResponseToken, Module, Args, undefined).
+send_command_to_queue(EImap, From, ResponseToken, Module, Args, Folder) ->
+    { Message, ResponseType } = Module:new_command(Args),
+    Command = #command{ mbox = Folder, message = Message, response_type = ResponseType,
+                        from = From, response_token = ResponseToken,
+                        parse_state = Module },
+    gen_fsm:send_all_state_event(EImap, { ready_command, Command }).
+
 send_hello_string(Capabilities, ServerId, Receiver, ResponseToken, Passthrough, PassthroughReceiver) ->
     notify_of_response([{ capabilities, Capabilities }, { server_id, ServerId } ], Receiver, ResponseToken),
     passthrough_capabilities(Capabilities, ServerId, Passthrough, PassthroughReceiver).
@@ -346,28 +322,26 @@ notify_of_response(Response, From, Token) -> From ! { Token, Response }.
 notify_of_mbox_failure_during_filter(Command, true) -> notify_of_response({ error, mailboxnotfound }, Command), false;
 notify_of_mbox_failure_during_filter(_Command, false) -> true.
 
-next_command_after_response({ more, Fun, ParseState }, State) when is_function(Fun, 3) ->
-    { next_state, wait_response, State#state{ parse_state = ParseState, current_command = State#state.current_command#command{ parse_fun = Fun } } };
 next_command_after_response({ more, ParseState }, State) ->
-    { next_state, wait_response, State#state{ parse_state = ParseState } };
+    { next_state, wait_response, State#state{ current_command = State#state.current_command#command{ parse_state = ParseState } } };
 next_command_after_response({ error, _ } = ErrorResponse, State) ->
     notify_of_response(ErrorResponse, State#state.current_command),
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ parse_state = none } };
+    { next_state, idle, State#state{ current_command = undefined } };
 next_command_after_response({ fini, Response }, State) ->
     %lager:info("Notifying with ~p", [State#state.current_command]),
     notify_of_response(Response, State#state.current_command),
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ parse_state = none } };
+    { next_state, idle, State#state{ current_command = undefined } };
 next_command_after_response(starttls, State) ->
     { TLSState, Socket } = upgrade_socket(State),
     %lager:info("~p Upgraded the socket ...", [self()]),
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ parse_state = none, socket = Socket, tls_state = TLSState } };
+    { next_state, idle, State#state{ current_command = undefined, socket = Socket, tls_state = TLSState } };
 next_command_after_response(compression_active, State) ->
     { Inflator, Deflator } = eimap_utils:new_imap_compressors(),
     gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ inflator = Inflator, deflator = Deflator } };
+    { next_state, idle, State#state{ current_command = undefined, inflator = Inflator, deflator = Deflator } };
 next_command_after_response({ close_socket, Response }, State) ->
     notify_of_response(Response, State#state.current_command),
     { stop, normal, State }.
@@ -383,12 +357,15 @@ create_socket(Host, Port, starttls, Receiver, ResponseToken, CommandQueue) ->
     %lager:debug("Setting up the tls creation with ultimate end point of ~p ~p", [Receiver, ResponseToken]),
     % we do an implicit TLS by adding a starttls command and then a capability command so we can
     % pretend to the user that the socket just magically opened up like this.
-    TlsCommand = #command{ message = eimap_command_starttls:new(noparams),
+    %TODO: some duplicated code here; would be nice to clean this up a bit?
+    { TlsMessage, TlsResponseType } = eimap_command_starttls:new_command(ok),
+    TlsCommand = #command{ message = TlsMessage, response_type = TlsResponseType,
                            from = self(), response_token = undefined,
-                           parse_fun = fun eimap_command_starttls:parse/2 },
-    CapabilitiesCommand = #command{ message = eimap_command_capability:new(noparams),
+                           parse_state = eimap_command_starttls },
+    { CapMessage, CapResponseType } = eimap_command_capability:new_command(ok),
+    CapabilitiesCommand = #command{ message = CapMessage, response_type = CapResponseType,
                                     from = self(), response_token = { posttls_capabilities, Receiver, ResponseToken },
-                                    parse_fun = fun eimap_command_capability:parse/2 },
+                                    parse_state = eimap_command_capability },
     % note the use of queue:in_r to _prepend_ the commands so they get run first even if the user
     % has pre-connection queued up commands
     NewCommandQueue = queue:in_r(TlsCommand, queue:in_r(CapabilitiesCommand, CommandQueue)),
@@ -434,28 +411,30 @@ send_command(Command, #state{ tls_state = true} = State) ->
 send_command(Command, State) ->
     send_command(fun gen_tcp:send/2, Command, State).
 
-send_command(Fun, #command{ mbox = undefined } = Command, State) ->
+send_command(SocketFun, #command{ mbox = undefined } = Command, State) ->
     %%lager:info("~p SELECT_DEBUG issuing command without mbox: ~p", [self(), Command#command.message]),
-    send_command_now(Fun, Command, State);
-send_command(Fun, #command{ mbox = MBox } = Command, #state{ current_mbox = CurrentMbox } = State) ->
+    send_command_now(SocketFun, Command, State);
+send_command(SocketFun, #command{ mbox = MBox } = Command, #state{ current_mbox = CurrentMbox } = State) ->
     %%lager:info("~p SELECT_DEBUG issuing command with mbox ~p (current: ~p, equal -> ~p): ~p", [self(), MBox, CurrentMbox, (MBox =:= CurrentMbox), Command#command.message]),
-    send_command_or_select_mbox(Fun, Command, State, MBox, MBox =:= CurrentMbox).
+    send_command_or_select_mbox(SocketFun, Command, State, MBox, MBox =:= CurrentMbox).
 
-send_command_or_select_mbox(Fun, Command, State, _MBox, true) ->
-    send_command_now(Fun, Command, State);
-send_command_or_select_mbox(Fun, DelayedCommand, State, MBox, false) ->
+send_command_or_select_mbox(SocketFun, Command, State, _MBox, true) ->
+    send_command_now(SocketFun, Command, State);
+send_command_or_select_mbox(SocketFun, DelayedCommand, State, MBox, false) ->
     NextState = reenque_command(DelayedCommand, State),
-    SelectMessage = eimap_command_examine:new(MBox),
-    SelectCommand = #command{ message = SelectMessage, parse_fun = fun eimap_command_examine:parse/2,
+    %TODO: this really should be SELECT rather than EXAMINE
+    { SelectMessage, ResponseType } = eimap_command_examine:new_command(MBox),
+    SelectCommand = #command{ message = SelectMessage, response_type = ResponseType,
+                              parse_state = eimap_command_examine,
                               from = self(), response_token = { selected, MBox } },
     %%lager:info("~p SELECT_DEBUG: Doing a select first ~p", [self(), SelectMessage]),
-    send_command_now(Fun, SelectCommand, NextState).
+    send_command_now(SocketFun, SelectCommand, NextState).
 
-send_command_now(Fun, #command{ message = Message } = Command, #state{ command_serial = Serial, socket = Socket } = State) ->
+send_command_now(SocketFun, #command{ message = Message } = Command, #state{ command_serial = Serial, socket = Socket } = State) ->
     Tag = list_to_binary(io_lib:format("EG~*..0B", [tag_field_width(Serial), Serial])),
     Data = <<Tag/binary, " ", Message/binary, "\r\n">>,
     %lager:info("Sending command via ~p: ~s", [Fun, Data]),
-    Fun(Socket, deflated(Data, State)),
+    SocketFun(Socket, deflated(Data, State)),
     State#state{ command_serial = Serial + 1, current_command = Command#command{ tag = Tag } }.
 
 enque_command(Command, State) ->

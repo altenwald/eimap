@@ -38,23 +38,28 @@ parse_test_() ->
           { fini, [{ uidvalidity, 44292 }, { recent, 1 }] }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_status:parse(Response, Tag))|Acc] end, [], Data).
+    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command:do_parse(multiline_response, Response, Tag, eimap_command_status))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
     [
         % input, output
-        { { "INBOX", [] }, <<"STATUS INBOX (MESSAGES)">> },
-        { { <<"INBOX">>, [] }, <<"STATUS INBOX (MESSAGES)">> },
-        { { <<>>, [messages] }, <<"STATUS INBOX (MESSAGES)">> },
-        { { <<"">>, [messages] }, <<"STATUS INBOX (MESSAGES)">> },
+        { { "INBOX", [] },
+          { <<"STATUS INBOX (MESSAGES)">>, multiline_response } },
+        { { <<"INBOX">>, [] },
+          { <<"STATUS INBOX (MESSAGES)">>, multiline_response } },
+        { { <<>>, [messages] },
+          { <<"STATUS INBOX (MESSAGES)">>, multiline_response } },
+        { { <<"">>, [messages] },
+          { <<"STATUS INBOX (MESSAGES)">>, multiline_response } },
         { { <<"/my/folder">>, [messages, recent, uidnext, uidvalidity, unseen] },
-           <<"STATUS /my/folder (MESSAGES RECENT UIDNEXT UIDVALIDITY UNSEEN)">> },
+          { <<"STATUS /my/folder (MESSAGES RECENT UIDNEXT UIDVALIDITY UNSEEN)">>, multiline_response } },
         { { <<"/my/folder">>, [uidnext, recent, uidvalidity, unseen] },
-           <<"STATUS /my/folder (UIDNEXT RECENT UIDVALIDITY UNSEEN)">> },
+          { <<"STATUS /my/folder (UIDNEXT RECENT UIDVALIDITY UNSEEN)">>, multiline_response } },
         { { <<"/my/folder">>, [garbage, unseen] },
-           <<"STATUS /my/folder (UNSEEN)">> },
-        { { <<"/my/folder">>, [garbage] }, <<"STATUS /my/folder (MESSAGES)">> }
+          { <<"STATUS /my/folder (UNSEEN)">>, multiline_response } },
+        { { <<"/my/folder">>, [garbage] },
+          { <<"STATUS /my/folder (MESSAGES)">>, multiline_response } }
     ],
-    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_status:new(Params))|Acc] end, [], Data).
+    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_status:new_command(Params))|Acc] end, [], Data).
 

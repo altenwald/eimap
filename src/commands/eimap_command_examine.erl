@@ -17,17 +17,18 @@
 
 -module(eimap_command_examine).
 -behavior(eimap_command).
--export([new/1, parse/2]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% https://tools.ietf.org/html/rfc3501#section-6.3.2
 
 %% Public API
-new(MBox) when is_binary(MBox) -> <<"EXAMINE \"", MBox/binary, "\"">>.
+new_command(MBox) when is_list(MBox) -> new_command(list_to_binary(MBox));
+new_command(MBox) when is_binary(MBox) -> { <<"EXAMINE \"", MBox/binary, "\"">>, multiline_response }.
 
-parse(Data, Tag) ->
-    case eimap_utils:check_response_for_failure(Data, Tag) of
-        ok -> { fini, ok };
-        { _, Reason } -> { error, Reason }
-    end.
+%TODO: parse:
+% REQUIRED untagged responses: FLAGS, EXISTS, RECENT
+% REQUIRED OK untagged responses:  UNSEEN,  PERMANENTFLAGS, UIDNEXT, UIDVALIDITY
+process_line(_Data, Acc) -> Acc.
 
-%% Private API
+formulate_response(ok, _Acc) -> { fini, ok };
+formulate_response({ _, Reason }, _Acc) -> { error, Reason }.

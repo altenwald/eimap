@@ -17,25 +17,26 @@
 
 -module(eimap_command_status).
 -behavior(eimap_command).
--export([new/1, parse/2, continue_parse/3]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 % https://tools.ietf.org/html/rfc5464
 
 % supported attributes: messages, recent, uidnext, uidvalidity, unseen, annotate
 % Public API
-new({ Folder, Attributes }) when is_list(Folder) -> new({ list_to_binary(Folder), Attributes });
-new({ <<>>, Attributes}) -> new({ <<"INBOX">>, Attributes });
-new({ Folder, []}) -> new({ Folder, [messages] });
-new({ Folder, Attributes }) when is_list(Attributes) ->
-          AttributesString = attribute_string(Attributes, <<>>),
-          <<"STATUS ", Folder/binary, " (", AttributesString/binary, ")">>.
+new_command({ Folder, Attributes }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes });
+new_command({ <<>>, Attributes}) -> new_command({ <<"INBOX">>, Attributes });
+new_command({ Folder, []}) -> new_command({ Folder, [messages] });
+new_command({ Folder, Attributes }) when is_list(Attributes) ->
+            AttributesString = attribute_string(Attributes, <<>>),
+            { <<"STATUS ", Folder/binary, " (", AttributesString/binary, ")">>, multiline_response }.
 
-parse(Data, Tag) -> continue_parse(Data, Tag, []).
+process_line(<<"* STATUS ", Data/binary>>, Acc) ->
+    process_status_items(binary:match(Data, <<"(">>),
+                         binary:match(Data, <<")">>),
+                         Data, Acc);
+process_line(_, Acc) -> Acc.
 
-continue_parse(Data, Tag, Acc) ->
-    Lines = binary:split(Data, <<"\r\n">>, [global]),
-    process_line(Tag, Lines, Acc).
-
+formulate_response(Result, Data) -> eimap_command:formulate_response(Result, Data).
 
 %% Private API
 attribute_string([], <<>>) -> attribute_string(messages);
@@ -49,25 +50,7 @@ attribute_string([Attribute|Attributes], String) ->
         Attr -> attribute_string(Attributes, <<String/binary, " ", Attr/binary>>)
     end.
 
-process_line(_Tag, [], Acc) -> { more, fun ?MODULE:continue_parse/3, Acc };
-process_line(Tag, [Line|MoreLines], Acc) ->
-    case eimap_utils:is_tagged_response(Line, Tag) of
-        true ->
-            formulate_response(eimap_utils:check_response_for_failure(Line, Tag), Acc);
-        false ->
-            process_line(Tag, MoreLines, process_status_items(Line, Acc))
-    end.
-
-%TODO: multiline, partial lines
-formulate_response(ok, Acc) -> { fini, Acc };
-formulate_response({ _, Reason }, _Acc) -> { error, Reason }.
-
-process_status_items(<<"* STATUS ", Data/binary>>, Acc) ->
-    process_status_items(binary:match(Data, <<"(">>),
-                         binary:match(Data, <<")">>),
-                         Data, Acc);
-process_status_items(_, Acc) -> Acc.
-
+% Private API
 process_status_items(nomatch, _, _Data, Acc) -> Acc;
 process_status_items(_, nomatch, _Data, Acc) -> Acc;
 process_status_items({ Start, _ }, { End, _ }, Data, Acc) ->

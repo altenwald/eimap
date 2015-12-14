@@ -38,15 +38,18 @@ parse_test_() ->
           { error, <<"Uh uh uh">> }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_compress:parse(Response, Tag))|Acc] end, [], Data).
+    InitArgs = ok,
+    { _Command, ResponseType } = eimap_command_compress:new_command(InitArgs),
+    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command:do_parse(ResponseType, Response, Tag, eimap_command_compress))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
     [
         % input, output
-        { <<>>, <<"COMPRESS DEFLATE">> },
-        { true, <<"COMPRESS DEFLATE">> },
-        { [], <<"COMPRESS DEFLATE">> }
+        { ok, { <<"COMPRESS DEFLATE">>, single_line_response } },
+        { <<>>, { <<"COMPRESS DEFLATE">>, single_line_response } },
+        { true, { <<"COMPRESS DEFLATE">>, single_line_response } },
+        { [], { <<"COMPRESS DEFLATE">>, single_line_response } }
     ],
-    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_compress:new(Params))|Acc] end, [], Data).
+    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_compress:new_command(Params))|Acc] end, [], Data).
 

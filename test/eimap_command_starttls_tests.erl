@@ -38,15 +38,15 @@ parse_test_() ->
           { error, <<"Uh uh uh">> }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_starttls:parse(Response, Tag))|Acc] end, [], Data).
+    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command:do_parse(single_line_response, Response, Tag, eimap_command_starttls))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
     [
         % input, output
-        { <<>>, <<"STARTTLS">> },
-        { true, <<"STARTTLS">> },
-        { [], <<"STARTTLS">> }
+        { <<>>, { <<"STARTTLS">>, single_line_response } },
+        { true, { <<"STARTTLS">>, single_line_response } },
+        { [], { <<"STARTTLS">>, single_line_response } }
     ],
-    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_starttls:new(Params))|Acc] end, [], Data).
+    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_starttls:new_command(Params))|Acc] end, [], Data).
 
