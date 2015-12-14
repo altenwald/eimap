@@ -326,12 +326,13 @@ code_change(_OldVsn, Statename, State, _Extra) -> { ok, Statename, State }.
 
 %% private API
 send_hello_string(Capabilities, ServerId, Receiver, ResponseToken, Passthrough, PassthroughReceiver) ->
-    Message = <<"* OK [CAPABILITY ", Capabilities/binary, "] ", ServerId/binary, "\r\n">>,
-    notify_of_response(Message, Receiver, ResponseToken),
-    passthrough_capabilities(Message, Passthrough, PassthroughReceiver).
+    notify_of_response([{ capabilities, Capabilities }, { server_id, ServerId } ], Receiver, ResponseToken),
+    passthrough_capabilities(Capabilities, ServerId, Passthrough, PassthroughReceiver).
 
-passthrough_capabilities(Response, true, Receiver) -> Receiver ! { imap_server_response, Response };
-passthrough_capabilities(_Response, _Passthrough, _Receiver) -> ok.
+passthrough_capabilities(Capabilities, ServerId, true, Receiver) ->
+    Message = <<"* OK [CAPABILITY ", Capabilities/binary, "] ", ServerId/binary, "\r\n">>,
+    Receiver ! { imap_server_response, Message };
+passthrough_capabilities(_Capabilities, _ServerId, _Passthrough, _Receiver) -> ok.
 
 notify_of_response(none, _Command) -> ok;
 notify_of_response(Response, #command { from = From, response_token = Token }) -> notify_of_response(Response, From, Token);
