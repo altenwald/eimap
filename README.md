@@ -113,7 +113,8 @@ are expected to provide at least two functions:
     new_command(Args) -> { Command, ResponseType }
         create a command bitstring to be passed to the imap server and defines
         the type of response for this command. Response types include
-        single_line_response, multiline_response and blob_response.
+        single_line_response, multiline_response, all_multiline_response
+        and blob_response.
 
         Args is specific to the command, and some commands
         ignore this parameter
@@ -143,6 +144,12 @@ Such commands must implement:
      formulate_response/2 is implemented as:
 
         formulate_response(Result, Response) -> eimap_command:formulate(Result, Response).
+
+Commands which are all_multiline_responses also must implement process_tagged_line/2
+which behaves exactly like process_line but which accepts the tagged response line
+from the IMAP server. This is useful for commands where useful information is also
+passed in the tagged response line. An example of this is the select/exmine
+commands.
 
 Unstructured (blob) responses
 -----------------------------
