@@ -23,7 +23,8 @@
          check_response_for_failure/2,
          ensure_binary/1,
          new_imap_compressors/0,
-         only_full_lines/1
+         only_full_lines/1,
+         binary_to_atom/1
         ]).
 
 %% Translate the folder name in to a fully qualified folder path such as it
@@ -204,3 +205,5 @@ only_full_lines(Buffer, BufferLength, $\n, Pos) -> { binary:part(Buffer, 0, Pos 
 only_full_lines(Buffer, _BufferLength, _, 0) -> { <<>>, Buffer };
 only_full_lines(Buffer, BufferLength, _, Pos) -> only_full_lines(Buffer, BufferLength, binary:at(Buffer, Pos - 1), Pos - 1).
 
+-spec binary_to_atom(Value :: binary()) -> ValueAsAtom :: atom().
+binary_to_atom(Value) -> list_to_atom(string:to_lower(binary_to_list(Value))).
