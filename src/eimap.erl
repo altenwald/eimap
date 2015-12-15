@@ -32,9 +32,9 @@
          capabilities/3,
          login/5, logout/3,
          compress/1,
-         get_server_metadata/4,
+         get_server_metadata/4, get_server_metadata/6,
          get_folder_status/5,
-         get_folder_metadata/5,
+         get_folder_metadata/5, get_folder_metadata/7,
          get_folder_annotations/4,
          peek_message_headers_and_body/5,
          get_path_tokens/3,
@@ -93,11 +93,19 @@ get_folder_status(EImap, From, ResponseToken, Folder, Properties) ->
 
 -spec get_folder_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: [list() | binary()]) -> ok.
 get_folder_metadata(EImap, From, ResponseToken, Folder, Properties) ->
-    send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { Folder, Properties }).
+    get_folder_metadata(EImap, From, ResponseToken, Folder, Properties, infinity, nomax).
+
+-spec get_folder_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: [list() | binary()], Depth :: infinity | integer(), MaxSize :: nomax | integer()) -> ok.
+get_folder_metadata(EImap, From, ResponseToken, Folder, Properties, Depth, MaxSize) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { Folder, Properties, Depth, MaxSize }).
 
 -spec get_server_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Properties:: [list() | binary()]) -> ok.
 get_server_metadata(EImap, From, ResponseToken, Properties) ->
-    send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { <<>>, Properties }).
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { <<>>, Properties, infinity, nomax }).
+
+-spec get_server_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Properties:: [list() | binary()], Depth :: infinity | integer(), MaxSize :: nomax | integer()) -> ok.
+get_server_metadata(EImap, From, ResponseToken, Properties, Depth, MaxSize) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { <<>>, Properties, Depth, MaxSize }).
 
 -spec get_folder_annotations(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: [list() | binary()]) -> ok.
 get_folder_annotations(EImap, From, ResponseToken, Folder) ->
