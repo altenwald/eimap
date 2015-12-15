@@ -28,6 +28,7 @@
 
 %% Translate the folder name in to a fully qualified folder path such as it
 %% would be used by a cyrus administrator.
+-spec extract_path_from_uri(SharedPrefix :: binary(), HierarchyDelim :: binary, URI :: binary()) -> Path :: binary() | bad_uri.
 extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_binary(URI) ->
     extract_path_from_uri(SharedPrefix, HierarchyDelim, binary_to_list(URI));
 extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_list(URI) ->
@@ -39,6 +40,7 @@ extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_list(URI) ->
         Error -> Error
     end.
 
+-spec extract_uidset_from_uri(URI :: binary()) -> UIDSet:: binary().
 extract_uidset_from_uri(URI) when is_binary(URI) ->
     { TagStart, TagEnd } = binary:match(URI, <<";UID=">>),
     UIDStart = TagStart + TagEnd + 1,
