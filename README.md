@@ -186,5 +186,15 @@ Maintainer: Aaron Seigo <aseigo@kolabsystems.com>
 Mailing list: devel@lists.kolab.com
 Project page: https://git.kolab.org/tag/eimap/
 
+This project uses the git flow workflow as described here:
+
+    http://nvie.com/posts/a-successful-git-branching-model/
+
+You can installed git flow from here:
+
+    https://github.com/nvie/gitflow
+
+Then initialize your local clone with `git flow init -d`.
+
 You can find the list of open tasks on the project page's workboard. Anything
 in the backlog is open to be worked on.
