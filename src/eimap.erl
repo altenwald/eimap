@@ -17,7 +17,6 @@
 
 -module(eimap).
 -behaviour(gen_fsm).
--include("eimap.hrl").
 
 %% API
 -export([start_link/1,
@@ -57,7 +56,7 @@
 -define(TCP_CONNECT_TIMEOUT, 5000).
 
 %% public API
-start_link(ServerConfig) when is_record(ServerConfig, eimap_server_config) -> gen_fsm:start_link(?MODULE, ServerConfig, []).
+start_link(Options) when is_list(Options) -> gen_fsm:start_link(?MODULE, Options, []).
 
 start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_event(PID, { start_passthrough, Receiver } ).
 stop_passthrough(PID) -> gen_fsm:send_event(PID, stop_passthrough).
@@ -118,7 +117,10 @@ noop(EImap, From, ResponseToken) ->
 
 
 %% gen_server API
-init(#eimap_server_config{ host = Host, port = Port, tls = TLS }) ->
+init(Options) ->
+    Host = proplists:get_value(host, Options, "127.0.0.1"),
+    Port = proplists:get_value(port, Options, 143),
+    TLS = proplists:get_value(tls, Options, false),
     State = #state { host = Host, port = Port, tls  = TLS },
     { ok, disconnected, State }.
 
