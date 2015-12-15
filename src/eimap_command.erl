@@ -14,7 +14,8 @@
 %-callback process_line(Data :: binary(), Acc :: any()) ->
 %    more_tuple() | finished_tuple() | error_tuple() | starttls.
 
-parse_response(multiline_response, Data, Tag, ParseState) -> multiline_parse(Data, Tag, ParseState);
+parse_response(multiline_response, Data, Tag, ParseState) -> multiline_parse(false, Data, Tag, ParseState);
+parse_response(all_multiline_response, Data, Tag, ParseState) -> multiline_parse(parse_tagged, Data, Tag, ParseState);
 parse_response(single_line_response, Data, Tag, Module) -> Module:formulate_response(Data, Tag);
 parse_response(blob_response, Data, Tag, { Continuation, ParseState }) -> Continuation(Data, Tag, ParseState);
 parse_response(blob_response, Data, Tag, Module) ->
@@ -23,23 +24,29 @@ parse_response(blob_response, Data, Tag, Module) ->
         Response -> Response
     end.
 
-multiline_parse(Data, Tag, { LastPartialLine, Acc, Module }) ->
+multiline_parse(ParseTaggedLine, Data, Tag, { LastPartialLine, Acc, Module }) ->
     FullBuffer = <<LastPartialLine/binary, Data/binary>>,
     { FullLinesBuffer, NewLastPartialLine } = eimap_utils:only_full_lines(FullBuffer),
     Lines = binary:split(FullLinesBuffer, <<"\r\n">>, [global]),
-    process_lines(Tag, NewLastPartialLine, Lines, Acc, Module);
-multiline_parse(Data, Tag, Module) ->
-    multiline_parse(Data, Tag, { <<>>, [], Module }).
+    process_lines(ParseTaggedLine, Tag, NewLastPartialLine, Lines, Acc, Module);
+multiline_parse(ParseTaggedLine, Data, Tag, Module) ->
+    multiline_parse(ParseTaggedLine, Data, Tag, { <<>>, [], Module }).
 
-process_lines(_Tag, LastPartialLine, [], Acc, Module) -> { more, { LastPartialLine, Acc, Module } };
-process_lines(Tag, LastPartialLine, [Line|MoreLines], Acc, Module) ->
-    case eimap_utils:is_tagged_response(Line, Tag) of
-        true ->
-            Module:formulate_response(eimap_utils:check_response_for_failure(Line, Tag), Acc);
-        false ->
-            process_lines(Tag, LastPartialLine, MoreLines, Module:process_line(Line, Acc), Module)
-    end.
+process_lines(_ParseTaggedLine, _Tag, LastPartialLine, [], Acc, Module) -> { more, { LastPartialLine, Acc, Module } };
+process_lines(ParseTaggedLine, Tag, LastPartialLine, [Line|MoreLines], Acc, Module) ->
+    process_line(ParseTaggedLine, eimap_utils:is_tagged_response(Line, Tag), Tag, LastPartialLine, Line, MoreLines, Acc, Module).
+
+
+process_line(ParseTaggedLine, true, Tag, _LastPartialLine, Line, _MoreLines, Acc, Module) ->
+    Checked = eimap_utils:check_response_for_failure(Line, Tag),
+    Module:formulate_response(Checked, parse_tagged(Checked, ParseTaggedLine, Line, Acc, Module));
+process_line(ParseTaggedLine, false, Tag, LastPartialLine, Line, MoreLines, Acc, Module) ->
+    process_lines(ParseTaggedLine, Tag, LastPartialLine, MoreLines, Module:process_line(Line, Acc), Module).
 
 formulate_response(ok, Data) -> { fini, Data };
 formulate_response({ _, Reason }, _Data) -> { error, Reason }.
+
+parse_tagged(_, false, _Line, Acc, _Module) -> Acc; % we are not passing the tagged line forward (no content, e.g)
+parse_tagged(ok, _, Line, Acc, Module) -> Module:process_tagged_line(Line, Acc); % success, so pass it forward
+parse_tagged(_Checked, _ParsedTaggedLine, _Line, Acc, _Module) -> Acc. % error, don't bother passing it forward
 

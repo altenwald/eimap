@@ -167,3 +167,14 @@ only_full_lines_test_() ->
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:only_full_lines(Input)) | Acc] end, [], Data).
 
+parse_flags_test_() ->
+    Data =
+    [
+        { <<"()">>, [] },
+        { <<>>, [] },
+        { <<"\\\\Answered \\\\Flagged \\\\Draft \\\\Deleted \\\\Seen">>, [<<"\\\\Answered">>, <<"\\\\Flagged">>, <<"\\\\Draft">>, <<"\\\\Deleted">>, <<"\\\\Seen">> ] },
+        { <<"(\\\\Answered \\\\Flagged \\\\Draft \\\\Deleted \\\\Seen)">>, [<<"\\\\Answered">>, <<"\\\\Flagged">>, <<"\\\\Draft">>, <<"\\\\Deleted">>, <<"\\\\Seen">> ] },
+        { "(\\\\Answered \\\\Flagged \\\\Draft \\\\Deleted \\\\Seen)", [<<"\\\\Answered">>, <<"\\\\Flagged">>, <<"\\\\Draft">>, <<"\\\\Deleted">>, <<"\\\\Seen">> ] }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:parse_flags(Input)) | Acc] end, [], Data).
+

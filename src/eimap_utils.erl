@@ -19,7 +19,7 @@
 -export([
          extract_path_from_uri/3, extract_uidset_from_uri/1,
          split_command_into_components/1, is_tagged_response/2, remove_tag_from_response/3,
-         header_name/1,
+         header_name/1, parse_flags/1,
          check_response_for_failure/2,
          ensure_binary/1,
          new_imap_compressors/0,
@@ -28,6 +28,7 @@
 
 %% Translate the folder name in to a fully qualified folder path such as it
 %% would be used by a cyrus administrator.
+-spec extract_path_from_uri(SharedPrefix :: binary(), HierarchyDelim :: binary, URI :: binary()) -> Path :: binary() | bad_uri.
 extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_binary(URI) ->
     extract_path_from_uri(SharedPrefix, HierarchyDelim, binary_to_list(URI));
 extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_list(URI) ->
@@ -39,6 +40,7 @@ extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_list(URI) ->
         Error -> Error
     end.
 
+-spec extract_uidset_from_uri(URI :: binary()) -> UIDSet:: binary().
 extract_uidset_from_uri(URI) when is_binary(URI) ->
     { TagStart, TagEnd } = binary:match(URI, <<";UID=">>),
     UIDStart = TagStart + TagEnd + 1,
@@ -48,10 +50,22 @@ extract_uidset_from_uri(URI) when is_binary(URI) ->
         { Semicolon, _ } -> binary:part(URI, UIDStart - 1, Semicolon - UIDStart + 1)
     end.
 
+-spec header_name(mailbox_uid | groupware_uid | groupware_uid) -> binary(); (any()) -> unknown.
 header_name(mailbox_uid) -> <<"/vendor/cmu/cyrus-imapd/uniqueid">>;
 header_name(groupware_type) -> <<"X-Kolab-Type">>;
 header_name(groupware_uid) -> <<"Subject">>;
 header_name(_) -> unknown.
+
+-spec parse_flags(FlagString :: binary() | list()) -> Flags :: [binary()].
+parse_flags(String) when is_list(String) -> parse_flags(list_to_binary(String));
+parse_flags(<<"(", Parened/binary>>) ->
+    case binary:match(Parened, <<")">>) of
+        nomatch -> [];
+        { ClosingParens, _ } -> parse_flags(binary_part(Parened, 0, ClosingParens))
+    end;
+parse_flags(<<>>) -> [];
+parse_flags(FlagString) when is_binary(FlagString) ->
+    binary:split(FlagString, <<" ">>, [global]).
 
 -spec check_response_for_failure(Data :: binary(), Tag :: undefined | binary()) -> ok | { error, Reason :: binary() }.
 check_response_for_failure(Data, undefined) when is_binary(Data) ->
@@ -187,6 +201,6 @@ only_full_lines(Buffer) ->
 
 only_full_lines(Buffer, BufferLength, $\n, Pos) when Pos =:= BufferLength -> { Buffer, <<>> };
 only_full_lines(Buffer, BufferLength, $\n, Pos) -> { binary:part(Buffer, 0, Pos + 1), binary:part(Buffer, Pos + 1, BufferLength - Pos - 1) };
-only_full_lines(Buffer, BufferLength, _, 0) -> { <<>>, Buffer };
+only_full_lines(Buffer, _BufferLength, _, 0) -> { <<>>, Buffer };
 only_full_lines(Buffer, BufferLength, _, Pos) -> only_full_lines(Buffer, BufferLength, binary:at(Buffer, Pos - 1), Pos - 1).
 
