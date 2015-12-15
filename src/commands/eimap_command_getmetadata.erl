@@ -24,9 +24,12 @@
 %% Public API
 new_command({ Folder }) -> new_command({ Folder, [] });
 new_command({ Folder, Attributes }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes });
-new_command({ Folder, Attributes }) ->
-    AttributesList = format_attributes(Attributes, <<>>),
-    Command = <<"GETMETADATA (DEPTH infinity) \"", Folder/binary, "\"", AttributesList/binary>>,
+new_command({ Folder, Attributes }) -> new_command({ Folder, Attributes, infinity, nomax });
+new_command({ Folder, Attributes, Depth, MaxSize }) ->
+    AttributesString = format_attributes(Attributes, <<>>),
+    DepthString = depth_param(Depth),
+    MaxSizeString = maxsize_param(MaxSize),
+    Command = metadata_comand(DepthString, MaxSizeString, Folder, AttributesString),
     { Command, multiline_response }.
 
 process_line(<<"* METADATA ", Details/binary>>, Acc) ->
@@ -37,6 +40,18 @@ process_line(_Line, Acc) -> Acc.
 formulate_response(Result, Data) -> eimap_command:formulate_response(Result, Data).
 
 %% Private API
+depth_param(infinity) -> <<"DEPTH infinity">>;
+depth_param(Depth) when is_integer(Depth) -> Bin = integer_to_binary(Depth), <<"DEPTH ", Bin/binary>>;
+depth_param(_) -> <<>>.
+
+maxsize_param(Size) when is_integer(Size) -> Bin = integer_to_binary(Size), <<"MAXSIZE ", Bin/binary>>;
+maxsize_param(_) -> <<>>.
+
+metadata_comand(<<>>, <<>>, Folder, Attributes) -> <<"GETMETADATA \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_comand(Depth, <<>>, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_comand(<<>>, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_comand(Depth, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, " ", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>.
+
 format_attributes([], <<>>) -> <<>>;
 format_attributes([], String) -> <<" (", String/binary, ")">>;
 format_attributes([Attribute|Attributes], String) ->
