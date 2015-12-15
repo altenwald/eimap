@@ -41,7 +41,7 @@ process_line(<<"* FLAGS ", FlagString/binary>>, Acc) ->
     [{ flags, Flags }|Acc];
 process_line(<<"* ", Info/binary>>, Acc) ->
     case binary:split(Info, <<" ">>) of
-        [ Value, Key ] -> [{ to_atom(Key), binary_to_integer(Value) }|Acc];
+        [ Value, Key ] -> [{ eimap_utils:binary_to_atom(Key), binary_to_integer(Value) }|Acc];
         _ ->Acc
     end;
 process_line(_Data, Acc) -> Acc.
@@ -52,16 +52,14 @@ process_tagged_line(Data, Acc) ->
         _ -> [{ writeable, true}|Acc]
     end.
 
-formulate_response(ok, Acc) -> { fini, Acc };
-formulate_response({ _, Reason }, _Acc) -> { error, Reason }.
+formulate_response(Response, Acc) -> eimap_command:formulate_response(Response, Acc).
 
 %PRIVATE
 process_ok_response(<<"PERMANENTFLAGS ", FlagString/binary>>, Acc) -> [{ permanent_flags, eimap_utils:parse_flags(FlagString) }|Acc];
 process_ok_response(<<"UIDVALIDITY ", String/binary>>, Acc) -> [{ uid_validity, binary_to_integer(String) }|Acc];
 process_ok_response(<<"UIDNEXT ", String/binary>>, Acc) -> [{ uid_next, binary_to_integer(String) }|Acc];
 process_ok_response(<<"HIGHESTMODSEQ ", String/binary>>, Acc) -> [{ highest_mod_seq, binary_to_integer(String) }|Acc];
-process_ok_response(<<"URLMECH ", String/binary>>, Acc) -> [{ url_mech, to_atom(String) }|Acc]; %TODO: this is very ugly
+process_ok_response(<<"URLMECH ", String/binary>>, Acc) -> [{ url_mech, eimap_utils:binary_to_atom(String) }|Acc]; %TODO: this is very ugly
 process_ok_response(<<"ANNOTATIONS ", String/binary>>, Acc) -> [{ annotations, binary_to_integer(String) }|Acc];
 process_ok_response(String, Acc) -> lager:warning("eimap_command_select_folder: Unknown untagged OK response ~s~n", [String]), Acc.
 
-to_atom(Value) -> list_to_atom(string:to_lower(binary_to_list(Value))).

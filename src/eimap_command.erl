@@ -1,6 +1,10 @@
 -module(eimap_command).
 
--export([parse_response/4, formulate_response/2]).
+-export([
+         parse_response/4,
+         formulate_response/2,
+         process_status_line/2
+        ]).
 
 -type more_tuple() :: { more, ParseContinuation :: parse_continuation(), State :: term }.
 -type finished_tuple() :: { fini, Results :: term }.
@@ -49,4 +53,11 @@ formulate_response({ _, Reason }, _Data) -> { error, Reason }.
 parse_tagged(_, false, _Line, Acc, _Module) -> Acc; % we are not passing the tagged line forward (no content, e.g)
 parse_tagged(ok, _, Line, Acc, Module) -> Module:process_tagged_line(Line, Acc); % success, so pass it forward
 parse_tagged(_Checked, _ParsedTaggedLine, _Line, Acc, _Module) -> Acc. % error, don't bother passing it forward
+
+-spec process_status_line(Line :: binary(), Acc :: list()) -> NewAcc :: list().
+process_status_line(<<"* ", Rest/binary>>, Acc) -> process_matched_status_line(binary:split(Rest, <<" ">>, [global]), Acc);
+process_status_line(_, Acc) -> Acc.
+
+process_matched_status_line([Number, Key|_], Acc) -> [{ eimap_utils:binary_to_atom(Key), binary_to_integer(Number) }|Acc];
+process_matched_status_line(_, Acc) -> Acc.
 
