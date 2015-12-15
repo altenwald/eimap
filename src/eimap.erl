@@ -38,7 +38,8 @@
          get_folder_metadata/5,
          get_folder_annotations/4,
          peek_message_headers_and_body/5,
-         get_path_tokens/3]).
+         get_path_tokens/3,
+         noop/3]).
 
 %% gen_fsm callbacks
 -export([disconnected/2, idle/2, passthrough/2, wait_response/2, startingtls/2]).
@@ -110,6 +111,11 @@ peek_message_headers_and_body(EImap, From, ResponseToken, Folder, MessageID) ->
 -spec get_path_tokens(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
 get_path_tokens(EImap, From, ResponseToken) ->
     send_command_to_queue(EImap, From, ResponseToken, eimap_command_namespace, ok).
+
+-spec noop(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
+noop(EImap, From, ResponseToken) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_noop, ok).
+
 
 %% gen_server API
 init(#eimap_server_config{ host = Host, port = Port, tls = TLS }) ->
