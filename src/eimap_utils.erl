@@ -189,6 +189,6 @@ only_full_lines(Buffer) ->
 
 only_full_lines(Buffer, BufferLength, $\n, Pos) when Pos =:= BufferLength -> { Buffer, <<>> };
 only_full_lines(Buffer, BufferLength, $\n, Pos) -> { binary:part(Buffer, 0, Pos + 1), binary:part(Buffer, Pos + 1, BufferLength - Pos - 1) };
-only_full_lines(Buffer, BufferLength, _, 0) -> { <<>>, Buffer };
+only_full_lines(Buffer, _BufferLength, _, 0) -> { <<>>, Buffer };
 only_full_lines(Buffer, BufferLength, _, Pos) -> only_full_lines(Buffer, BufferLength, binary:at(Buffer, Pos - 1), Pos - 1).
 
