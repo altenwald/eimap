@@ -17,13 +17,13 @@
 
 -module(eimap_command_examine).
 -behavior(eimap_command).
--export([new_command/1, process_line/2, formulate_response/2]).
+-export([new_command/1, process_line/2, process_tagged_line/2, formulate_response/2]).
 
 %% https://tools.ietf.org/html/rfc3501#section-6.3.2
 
 %% Public API
 new_command(MBox) when is_list(MBox) -> new_command(list_to_binary(MBox));
-new_command(MBox) when is_binary(MBox) -> { <<"EXAMINE \"", MBox/binary, "\"">>, multiline_response }.
+new_command(MBox) when is_binary(MBox) -> { <<"EXAMINE \"", MBox/binary, "\"">>, all_multiline_response }.
 
 %TODO: parse:
 % REQUIRED untagged responses: FLAGS, EXISTS, RECENT
@@ -41,7 +41,13 @@ process_line(<<"* ", Info/binary>>, Acc) ->
         [ Value, Key ] -> [{ to_atom(Key), binary_to_integer(Value) }|Acc];
         _ ->Acc
     end;
-process_line(Data, Acc) -> io:format("Skipping: ~p~n", [Data]), Acc.
+process_line(_Data, Acc) -> Acc.
+
+process_tagged_line(Data, Acc) ->
+    case binary:match(Data, <<"[READ-WRITE]">>) of
+        nomatch -> [{ writeable, false }|Acc];
+        _ -> [{ writeable, true}|Acc]
+    end.
 
 formulate_response(ok, Acc) -> { fini, Acc };
 formulate_response({ _, Reason }, _Acc) -> { error, Reason }.

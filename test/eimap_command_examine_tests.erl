@@ -28,6 +28,7 @@ parse_test_() ->
           <<"abcd">>,
           { fini,
             [
+             { writeable, true },
              { annotations, 65536 },
              { url_mech, internal },
              { highest_mod_seq, 1 },
@@ -61,8 +62,8 @@ new_test_() ->
     Data =
     [
         % input, output
-        { "Trash", { <<"EXAMINE \"Trash\"">>, multiline_response } },
-        { <<"Trash">>, { <<"EXAMINE \"Trash\"">>, multiline_response } }
+        { "Trash", { <<"EXAMINE \"Trash\"">>, all_multiline_response } },
+        { <<"Trash">>, { <<"EXAMINE \"Trash\"">>, all_multiline_response } }
     ],
     lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_examine:new_command(Params))|Acc] end, [], Data).
 
