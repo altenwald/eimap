@@ -15,15 +15,18 @@
 %% You should have received a copy of the GNU General Public License
 %% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
--module(eimap_command_examine).
+-module(eimap_command_switch_folder).
 -behavior(eimap_command).
 -export([new_command/1, process_line/2, process_tagged_line/2, formulate_response/2]).
 
 %% https://tools.ietf.org/html/rfc3501#section-6.3.2
 
 %% Public API
+new_command({ MBox, Mechanism }) when is_list(MBox) -> new_command({ list_to_binary(MBox), Mechanism });
+new_command({ MBox, select }) -> new_command(MBox);
+new_command({ MBox, examine }) -> { <<"EXAMINE \"", MBox/binary, "\"">>, all_multiline_response };
 new_command(MBox) when is_list(MBox) -> new_command(list_to_binary(MBox));
-new_command(MBox) when is_binary(MBox) -> { <<"EXAMINE \"", MBox/binary, "\"">>, all_multiline_response }.
+new_command(MBox) when is_binary(MBox) -> { <<"SELECT \"", MBox/binary, "\"">>, all_multiline_response }.
 
 %TODO: parse:
 % REQUIRED untagged responses: FLAGS, EXISTS, RECENT

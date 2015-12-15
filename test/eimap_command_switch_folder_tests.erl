@@ -15,7 +15,7 @@
 %% You should have received a copy of the GNU General Public License
 %% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
--module(eimap_command_examine_tests).
+-module(eimap_command_switch_folder_tests).
 -include_lib("eunit/include/eunit.hrl").
 
 parse_test_() ->
@@ -55,15 +55,18 @@ parse_test_() ->
         }
     ],
     lists:foldl(fun({ InitArgs, ServerResponse, Tag, Parsed }, Acc) ->
-                        { _Command, ResponseType } = eimap_command_examine:new_command(InitArgs),
-                        [?_assertEqual(Parsed, eimap_command:parse_response(ResponseType, ServerResponse, Tag, eimap_command_examine))|Acc] end, [], Data).
+                        { _Command, ResponseType } = eimap_command_switch_folder:new_command(InitArgs),
+                        [?_assertEqual(Parsed, eimap_command:parse_response(ResponseType, ServerResponse, Tag, eimap_command_switch_folder))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
     [
         % input, output
-        { "Trash", { <<"EXAMINE \"Trash\"">>, all_multiline_response } },
-        { <<"Trash">>, { <<"EXAMINE \"Trash\"">>, all_multiline_response } }
+        { "Trash", { <<"SELECT \"Trash\"">>, all_multiline_response } },
+        { <<"Trash">>, { <<"SELECT \"Trash\"">>, all_multiline_response } },
+        { { <<"Trash">>, select }, { <<"SELECT \"Trash\"">>, all_multiline_response } },
+        { { <<"Trash">>, examine }, { <<"EXAMINE \"Trash\"">>, all_multiline_response } },
+        { { "Trash", examine }, { <<"EXAMINE \"Trash\"">>, all_multiline_response } }
     ],
-    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_examine:new_command(Params))|Acc] end, [], Data).
+    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_switch_folder:new_command(Params))|Acc] end, [], Data).
 

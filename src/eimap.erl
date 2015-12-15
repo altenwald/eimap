@@ -423,9 +423,9 @@ send_command_or_select_mbox(SocketFun, Command, State, _MBox, true) ->
 send_command_or_select_mbox(SocketFun, DelayedCommand, State, MBox, false) ->
     NextState = reenque_command(DelayedCommand, State),
     %TODO: this really should be SELECT rather than EXAMINE
-    { SelectMessage, ResponseType } = eimap_command_examine:new_command(MBox),
+    { SelectMessage, ResponseType } = eimap_command_switch_folder:new_command(MBox),
     SelectCommand = #command{ message = SelectMessage, response_type = ResponseType,
-                              parse_state = eimap_command_examine,
+                              parse_state = eimap_command_switch_folder,
                               from = self(), response_token = { selected, MBox } },
     %%lager:info("~p SELECT_DEBUG: Doing a select first ~p", [self(), SelectMessage]),
     send_command_now(SocketFun, SelectCommand, NextState).
