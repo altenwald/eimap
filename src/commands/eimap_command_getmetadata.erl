@@ -33,9 +33,9 @@ parse(Data, Tag) -> continue_parse(Data, Tag, { <<>>, [] }).
 
 continue_parse(Data, Tag, { LastPartialLine, Acc }) ->
     FullBuffer = <<LastPartialLine/binary, Data/binary>>,
-    { FullLinesBuffer, LastPartialLine } = eimap_utils:only_full_lines(FullBuffer),
+    { FullLinesBuffer, NewLastPartialLine } = eimap_utils:only_full_lines(FullBuffer),
     Lines = binary:split(FullLinesBuffer, <<"\r\n">>, [global]),
-    process_line(Tag, LastPartialLine, Lines, Acc).
+    process_line(Tag, NewLastPartialLine, Lines, Acc).
 
 
 %% Private API
