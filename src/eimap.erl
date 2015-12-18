@@ -58,8 +58,8 @@
 %% public API
 start_link(Options) when is_list(Options) -> gen_fsm:start_link(?MODULE, Options, []).
 
-start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_event(PID, { start_passthrough, Receiver } ).
-stop_passthrough(PID) -> gen_fsm:send_event(PID, stop_passthrough).
+start_passthrough(PID, Receiver) when is_pid(Receiver)  -> gen_fsm:send_all_state_event(PID, { start_passthrough, Receiver } ).
+stop_passthrough(PID) -> gen_fsm:send_all_state_event(PID, stop_passthrough).
 passthrough_data(PID, Data) when is_binary(Data) -> gen_fsm:send_all_state_event(PID, { passthrough, Data }).
 connect(PID) -> connect(PID, undefined, undefined).
 connect(PID, From, ResponseToken) -> gen_fsm:send_all_state_event(PID, { connect, From, ResponseToken }).
@@ -132,10 +132,6 @@ init(Options) ->
     State = #state { host = Host, port = Port, tls  = TLS },
     { ok, disconnected, State }.
 
-disconnected({ start_passthrough, Receiver }, State) ->
-    { next_state, disconnected, State#state{ passthrough = true, passthrough_recv = Receiver } };
-disconnected(stop_passthrough, State) ->
-    { next_state, disconnected, State#state{ passthrough = false } };
 disconnected({ connect, Receiver, ResponseToken }, #state{ command_queue = CommandQueue, host = Host, port = Port, tls = TLS, socket = undefined } = State) ->
     %lager:debug("CONNECTING! ~p ~p", [Receiver, ResponseToken]),
     { {ok, Socket}, TlsState, SendCapabilitiesTo, NewCommandQueue } = create_socket(Host, Port, TLS, Receiver, ResponseToken, CommandQueue),
@@ -177,11 +173,12 @@ passthrough(Command, State) when is_record(Command, command) ->
 idle(process_command_queue, #state{ command_queue = Queue } = State) ->
     case queue:out(Queue) of
        { { value, Command }, ModifiedQueue } when is_record(Command, command) ->
-            %%lager:info("Clearing queue of ~p", [Command]),
+            %lager:info("Clearing queue of ~p", [Command]),
             NewState = send_command(Command, State#state{ command_queue = ModifiedQueue }),
             { next_state, wait_response, NewState };
        { empty, ModifiedQueue } ->
             NextState = next_state_after_emptied_queue(State),
+            %lager:info("Queue was empty moving on to ... ~p", [NextState]),
             { next_state, NextState, State#state{ command_queue = ModifiedQueue } }
     end;
 idle({ data, _Data }, State) ->
@@ -232,6 +229,10 @@ handle_event(disconnect, _StateName, State) ->
     { next_state, disconnected, reset_state(State) };
 handle_event({ ready_command, Command }, StateName, State) when is_record(Command, command) ->
     ?MODULE:StateName(Command, State);
+handle_event({ start_passthrough, Receiver }, StateName, State) ->
+    { next_state, StateName, State#state{ passthrough = true, passthrough_recv = Receiver } };
+handle_event(stop_passthrough, StateName, State) ->
+    { next_state, StateName, State#state{ passthrough = false } };
 handle_event({ passthrough, Data }, passthrough, #state{ passthrough = true } = State) ->
     ?MODULE:passthrough({ passthrough, Data }, State);
 handle_event({ passthrough, Data }, StateName, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
