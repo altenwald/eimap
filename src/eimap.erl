@@ -309,7 +309,7 @@ handle_info({ { connected, Receiver, ResponseToken }, { Capabilities, ServerID }
     end,
     { next_state, idle, State#state{ parse_state = none, server_id = ServerID } };
 handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ server_id = ServerID, passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
-    send_hello_string(OurCapabilities, ServerID, Receiver, ResponseToken, Passthrough, PassthroughReceiver),
+    send_hello_string(Capabilities, ServerID, Receiver, ResponseToken, Passthrough, PassthroughReceiver),
     { next_state, idle, State#state{ parse_state = none } };
 handle_info({ { selected, MBox }, ok }, StateName, State) ->
     %%lager:info("~p Selected mbox ~p", [self(), MBox]),
