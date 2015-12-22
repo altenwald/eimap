@@ -249,7 +249,13 @@ handle_event(disconnect, _StateName, State) ->
 handle_event({ start_passthrough, Receiver }, StateName, State) ->
     { next_state, StateName, State#state{ passthrough = true, passthrough_recv = Receiver } };
 handle_event(stop_passthrough, StateName, State) ->
-    { next_state, StateName, State#state{ passthrough = false } };
+    NextState = case StateName of
+                    passthrough ->
+                        gen_fsm:send_event(self(), process_command_queue),
+                        idle;
+                    State -> State
+                end,
+    { next_state, NextState, State#state{ passthrough = false } };
 handle_event({ ready_command, Command }, StateName, State) when is_record(Command, command) ->
     ?MODULE:StateName(Command, State);
 handle_event({ passthrough, Data }, passthrough, #state{ passthrough = true } = State) ->
