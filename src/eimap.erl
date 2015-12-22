@@ -158,14 +158,6 @@ passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
     %lager:info("Passing back ~p", [Data]),
     Receiver ! { imap_server_response, Data },
     { next_state, passthrough, State };
-passthrough({ start_passthrough, Receiver }, State) ->
-    %% already in passthrough, but perhaps the Receiver changes ...
-    lager:warning("Already in passthrough mode, and passthrough mode was requested again!"),
-    %% TODO: should this count the # of times start is called and require an equal # of ends?
-    { next_state, passthrough, State#state{ passthrough_recv = Receiver } };
-passthrough(stop_passthrough, State) ->
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ passthrough = false } };
 passthrough(Command, State) when is_record(Command, command) ->
     gen_fsm:send_event(self(), process_command_queue),
     { next_state, idle, enque_command(Command, State) }.
