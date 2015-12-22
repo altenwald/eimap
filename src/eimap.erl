@@ -262,6 +262,10 @@ handle_event({ passthrough, Data }, passthrough, #state{ passthrough = true } = 
     ?MODULE:passthrough({ passthrough, Data }, State);
 handle_event({ passthrough, Data }, StateName, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
+    case StateName of
+        idle -> gen_fsm:send_event(self(), process_command_queue);
+        _ -> ok
+    end,
     { next_state, StateName, State#state{ passthrough_send_buffer = NewBuffer } };
 handle_event(_Event, StateName, State) -> { next_state, StateName, State}.
 
