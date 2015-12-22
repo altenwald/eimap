@@ -2,7 +2,7 @@
 {application, eimap,
  [
   { description, "IMAP client implementation" },
-  { vsn, "0.1.3" },
+  { vsn, "0.1.4" },
   { registered, [] },
   { applications, [
                    kernel,
