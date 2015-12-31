@@ -226,7 +226,10 @@ wait_response({ data, Data }, #state{ current_command = #command{ parse_fun = Fu
 wait_response({ data, Data }, #state{ parse_state = ParseState, current_command = #command{ parse_fun = Fun, tag = Tag } } = State) when is_function(Fun, 3) ->
     Response = Fun(Data, Tag, ParseState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
-    next_command_after_response(Response, State).
+    next_command_after_response(Response, State);
+wait_response(process_command_queue, State) ->
+    % ignore this one, we'll get to it when the response comes
+    { next_state, wait_response, State }.
 
 startingtls({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     { next_state, startingtls, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
