@@ -199,7 +199,10 @@ wait_response({ data, _Data }, #state{ current_command = #command{ parse_state =
 wait_response({ data, Data }, #state{ current_command = #command{ response_type = ResponseType, parse_state = CommandState , tag = Tag } } = State) ->
     Response = eimap_command:parse_response(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
-    next_command_after_response(Response, State).
+    next_command_after_response(Response, State);
+wait_response(process_command_queue, State) ->
+    % ignore this one, we'll get to it when the response comes
+    { next_state, wait_response, State }.
 
 startingtls({ passthrough, Data }, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     { next_state, startingtls, State#state{ passthrough_send_buffer = <<Buffer/binary, Data>> } };
