@@ -260,13 +260,13 @@ handle_info({ tcp, Socket, Bin }, StateName, #state{ socket = Socket } = State) 
     %lager:info("Received from server plaintext: ~s", [Data]),
     ?MODULE:StateName({ data, Data }, State);
 handle_info({ ssl_closed, Socket }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
-    lager:info("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
+    lager:debug("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
 handle_info({ ssl_error, Socket, _Reason }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
     lager:info("~p Disconnected due to socket error from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
 handle_info({ tcp_closed, Socket }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
-    lager:info("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
+    lager:debug("~p Disconnected from ~p:~p .\n", [self(), Host, Port]),
     { stop, normal, State };
 handle_info({ tcp_error, Socket, _Reason }, _StateName, #state{ socket = Socket, host = Host, port = Port } = State) ->
     lager:info("~p Disconnected due to socket error from ~p:~p .\n", [self(), Host, Port]),
