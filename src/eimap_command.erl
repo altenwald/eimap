@@ -38,7 +38,8 @@ multiline_parse(ParseTaggedLine, Data, Tag, Module) ->
 
 process_lines(_ParseTaggedLine, _Tag, LastPartialLine, [], Acc, Module) -> { more, { LastPartialLine, Acc, Module } };
 process_lines(ParseTaggedLine, Tag, LastPartialLine, [Line|MoreLines], Acc, Module) ->
-    process_line(ParseTaggedLine, eimap_utils:is_tagged_response(Line, Tag), Tag, LastPartialLine, Line, MoreLines, Acc, Module).
+    { FirstLine, ContinuationBytes } = eimap_utils:num_literal_continuation_bytes(Line),
+    process_line(ContinuationBytes, ParseTaggedLine, eimap_utils:is_tagged_response(FirstLine, Tag), Tag, LastPartialLine, FirstLine, MoreLines, Acc, Module).
 
 
 process_line(ContinuationBytes, ParseTaggedLine, IsTagged, Tag, LastPartialLine, Line, [<<>>|MoreLines], Acc, Module) ->
@@ -47,8 +48,19 @@ process_line(ContinuationBytes, ParseTaggedLine, IsTagged, Tag, LastPartialLine,
 process_line(0, ParseTaggedLine, tagged, Tag, _LastPartialLine, Line, _MoreLines, Acc, Module) ->
     Checked = eimap_utils:check_response_for_failure(Line, Tag),
     Module:formulate_response(Checked, parse_tagged(Checked, ParseTaggedLine, Line, Acc, Module));
-process_line(ParseTaggedLine, untagged, Tag, LastPartialLine, Line, MoreLines, Acc, Module) ->
-    process_lines(ParseTaggedLine, Tag, LastPartialLine, MoreLines, Module:process_line(Line, Acc), Module).
+process_line(0, ParseTaggedLine, untagged, Tag, LastPartialLine, Line, MoreLines, Acc, Module) ->
+    io:format("Calling it here with ~p~n~n...", [Line]),
+    process_lines(ParseTaggedLine, Tag, LastPartialLine, MoreLines, Module:process_line(Line, Acc), Module);
+process_line(ContinuationBytes, ParseTaggedLine, _IsTagged, Tag, LastPartialLine, Line, [], Acc, Module) ->
+    %% the line was continued, but there is no more lines ... so this line is now our last partial line. more must be on its way
+    io:format("Missing lines!~p~n~n", [Acc]),
+    BytesAsBinary = integer_to_binary(ContinuationBytes),
+    process_lines(ParseTaggedLine, Tag, <<Line/binary, ${, BytesAsBinary/binary, $+, $}, LastPartialLine/binary>>, [], Acc, Module);
+process_line(_ContinuationBytes, ParseTaggedLine, IsTagged, Tag, LastPartialLine, Line, [NextLine|MoreLines], Acc, Module) ->
+    { StrippedNextLine, NextContinuationBytes } = eimap_utils:num_literal_continuation_bytes(NextLine),
+    io:format("Connected up the next line: ~p ~i~n", [StrippedNextLine, NextContinuationBytes]),
+    FullLine = <<Line/binary, StrippedNextLine/binary>>,
+    process_line(NextContinuationBytes, ParseTaggedLine, IsTagged, Tag, LastPartialLine, FullLine, MoreLines, Acc, Module).
 
 formulate_response(ok, Data) -> { fini, Data };
 formulate_response({ _, Reason }, _Data) -> { error, Reason }.

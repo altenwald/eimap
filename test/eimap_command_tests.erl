@@ -19,9 +19,9 @@
 -include_lib("eunit/include/eunit.hrl").
 -export([process_line/2, formulate_response/2]).
 
-% c("test/eimap_uidset_tests.erl"). eunit:test(eimap_uidset).
+% c("test/eimap_command_tests.erl"). eunit:test(eimap_command).
 
-process_line(Data, Acc) -> [Data | Acc].
+process_line(Data, Acc) -> [{ marked, Data } | Acc].
 formulate_response(Result, Data) -> eimap_command:formulate_response(Result, lists:reverse(Data)).
 
 
@@ -31,25 +31,35 @@ literal_continuations_test_() ->
         % input, output
         % { Binary Response, Binary Tag, Parsed Results }
         {
-          <<"* STATUS blurdybloop (MESSAGES 231 {14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"* STATUS 1 (MESSAGES 231 {14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
-          { fini, [<<"* STATUS blurdybloop (MESSAGES 231 UIDNEXT 44292)">>] }
+          { fini, [ { marked, <<"* STATUS 1 (MESSAGES 231 UIDNEXT 44292)">> } ] }
         },
         {
-          <<"* STATUS blurdybloop (MESSAGES 231 {h14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"* STATUS 1a (MESSAGES 231 {14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation">>,
           <<"abcd">>,
-          { fini, [<<"* STATUS blurdybloop (MESSAGES 231 {h14+}">>, <<"UIDNEXT 44292)">>] }
+          { more, { <<"abcd OK Begin TLS negotiation">>, [ { marked, <<"* STATUS 1a (MESSAGES 231 UIDNEXT 44292)">> } ], ?MODULE } }
         },
         {
-          <<"* STATUS blurdybloop (MESSAGES 231 \r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"* STATUS 2 (MESSAGES 231 {14+}\r\n">>,
           <<"abcd">>,
-          { fini, [<<"* STATUS blurdybloop (MESSAGES 231 ">>, <<"UIDNEXT 44292)">>] }
+          { more, { <<"* STATUS 2 (MESSAGES 231 {14+}">>, [], ?MODULE } }
         },
         {
-          <<"* STATUS blurdybloop (MESSAGES 231 UIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"* STATUS 3 (MESSAGES 231 {h14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
-          { fini, [<<"* STATUS blurdybloop (MESSAGES 231 UIDNEXT 44292)">>] }
+          { fini, [ { marked, <<"* STATUS 3 (MESSAGES 231 {h14+}">> }, { marked, <<"UIDNEXT 44292)">> } ] }
+        },
+        {
+          <<"* STATUS 4 (MESSAGES 231 \r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"abcd">>,
+          { fini, [ { marked, <<"* STATUS 4 (MESSAGES 231 ">> }, { marked, <<"UIDNEXT 44292)">> } ] }
+        },
+        {
+          <<"* STATUS 5 (MESSAGES 231 UIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"abcd">>,
+          { fini, [ { marked, <<"* STATUS 5 (MESSAGES 231 UIDNEXT 44292)">> } ] }
         }
     ],
-    lists:foldl(fun({ Binary, Tag, Result }, Acc) -> [?_assertEqual(Result, eimap_command:parse_response(multiline_response, Binary, Tag, eimap_command_tests))|Acc] end, [], Data).
+    lists:foldl(fun({ Binary, Tag, Result }, Acc) -> [?_assertEqual(Result, eimap_command:parse_response(multiline_response, Binary, Tag, ?MODULE))|Acc] end, [], Data).
 
