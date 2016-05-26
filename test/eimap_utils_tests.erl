@@ -183,16 +183,15 @@ num_literal_continuation_bytes_test_() ->
     Data =
     [
         { <<"abcd">>, { <<"abcd">>, 0 } },
-        { <<"abcd{5+}">>, { <<"abcd">>, 5 } },
-        { <<"abcd{100+}">>, { <<"abcd">>, 100 } },
-        { <<"123abcd{100+}">>, { <<"123abcd">>, 100  } },
-        { <<"ab{123abcd{100+}">>, { <<"ab{123abcd">>, 100  } },
-        { <<"ab{123abcd{1{00+}">>, { <<"ab{123abcd{1">>, 0 } },
-        { <<"abcd{aa0+}">>, { <<"abcd{aa0+}">>, 0 } },
-        { <<"abcd{10aa0+}">>, { <<"abcd{10aa0+}">>, 0 } },
-        { <<"abcd100+}">>, { <<"abcd100+}">>, 0 } },
-        { <<"abcd{100}">>, { <<"abcd{100}">>, 0 } },
-        { <<"abcd100+}">>, { <<"abcd100+}">>, 0 } }
+        { <<"abcd{5}">>, { <<"abcd">>, 5 } },
+        { <<"abcd{100}">>, { <<"abcd">>, 100 } },
+        { <<"123abcd{100}">>, { <<"123abcd">>, 100  } },
+        { <<"ab{123abcd{100}">>, { <<"ab{123abcd">>, 100  } },
+        { <<"ab{123abcd{1{00}">>, { <<"ab{123abcd{1">>, 0 } },
+        { <<"abcd{aa0}">>, { <<"abcd{aa0}">>, 0 } },
+        { <<"abcd{10aa0}">>, { <<"abcd{10aa0}">>, 0 } },
+        { <<"abcd100}">>, { <<"abcd100}">>, 0 } },
+        { <<"abcd100}">>, { <<"abcd100}">>, 0 } }
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:num_literal_continuation_bytes(Input)) | Acc] end, [], Data).
 

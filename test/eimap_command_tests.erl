@@ -31,24 +31,24 @@ literal_continuations_test_() ->
         % input, output
         % { Binary Response, Binary Tag, Parsed Results }
         {
-          <<"* STATUS 1 (MESSAGES 231 {14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"* STATUS 1 (MESSAGES 231 {14}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
           { fini, [ { marked, <<"* STATUS 1 (MESSAGES 231 UIDNEXT 44292)">> } ] }
         },
         {
-          <<"* STATUS 1a (MESSAGES 231 {14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation">>,
+          <<"* STATUS 1a (MESSAGES 231 {14}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation">>,
           <<"abcd">>,
           { more, { <<"abcd OK Begin TLS negotiation">>, [ { marked, <<"* STATUS 1a (MESSAGES 231 UIDNEXT 44292)">> } ], ?MODULE } }
         },
         {
-          <<"* STATUS 2 (MESSAGES 231 {14+}\r\n">>,
+          <<"* STATUS 2 (MESSAGES 231 {14}\r\n">>,
           <<"abcd">>,
-          { more, { <<"* STATUS 2 (MESSAGES 231 {14+}">>, [], ?MODULE } }
+          { more, { <<"* STATUS 2 (MESSAGES 231 {14}">>, [], ?MODULE } }
         },
         {
-          <<"* STATUS 3 (MESSAGES 231 {h14+}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"* STATUS 3 (MESSAGES 231 {h14}\r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
-          { fini, [ { marked, <<"* STATUS 3 (MESSAGES 231 {h14+}">> }, { marked, <<"UIDNEXT 44292)">> } ] }
+          { fini, [ { marked, <<"* STATUS 3 (MESSAGES 231 {h14}">> }, { marked, <<"UIDNEXT 44292)">> } ] }
         },
         {
           <<"* STATUS 4 (MESSAGES 231 \r\nUIDNEXT 44292)\r\nabcd OK Begin TLS negotiation now\r\n">>,

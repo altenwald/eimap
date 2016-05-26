@@ -102,15 +102,15 @@ is_tagged_response(Buffer, Tag) ->
 num_literal_continuation_bytes(Buffer) when size(Buffer) < 4 ->
     { Buffer, 0 };
 num_literal_continuation_bytes(Buffer) ->
-    BufferSize = size(Buffer),
-    case binary:part(Buffer, BufferSize - 2, 2) =:= <<"+}">> of
-        true -> number_of_bytes_in_continuation(Buffer, BufferSize);
+    case binary:last(Buffer) =:= $} of
+        true -> number_of_bytes_in_continuation(Buffer);
         false -> { Buffer, 0 }
     end.
 
-number_of_bytes_in_continuation(Buffer, BufferSize) ->
-    OpenBracePos = find_continuation_open_brace(Buffer, BufferSize - 4),
-    confirm_continuation(Buffer, BufferSize, OpenBracePos).
+number_of_bytes_in_continuation(Buffer) ->
+    BufferSize = size(Buffer),
+    OpenBracePos = find_continuation_open_brace(Buffer, BufferSize - 3),
+    confirm_continuation(Buffer, OpenBracePos).
 
 find_continuation_open_brace(_Buffer, 0) -> -1;
 find_continuation_open_brace(Buffer, Pos) ->
@@ -119,10 +119,11 @@ find_continuation_open_brace(Buffer, Pos) ->
         _ -> find_continuation_open_brace(Buffer, Pos - 1)
     end.
 
-confirm_continuation(Buffer, _BufferSize, -1) ->
+confirm_continuation(Buffer, -1) ->
     { Buffer, 0 };
-confirm_continuation(Buffer, BufferSize, OpenBracePos) ->
-    try binary_to_integer(binary:part(Buffer, OpenBracePos + 1, BufferSize - OpenBracePos - 3)) of
+confirm_continuation(Buffer, OpenBracePos) ->
+    BufferSize = size(Buffer),
+    try binary_to_integer(binary:part(Buffer, OpenBracePos + 1, BufferSize - OpenBracePos - 2)) of
         Result -> { binary:part(Buffer, 0, OpenBracePos), Result }
     catch
         _:_ -> { Buffer, 0 }

@@ -55,7 +55,7 @@ process_line(ContinuationBytes, ParseTaggedLine, _IsTagged, Tag, LastPartialLine
     %% the line was continued, but there is no more lines ... so this line is now our last partial line. more must be on its way
     io:format("Missing lines!~p~n~n", [Acc]),
     BytesAsBinary = integer_to_binary(ContinuationBytes),
-    process_lines(ParseTaggedLine, Tag, <<Line/binary, ${, BytesAsBinary/binary, $+, $}, LastPartialLine/binary>>, [], Acc, Module);
+    process_lines(ParseTaggedLine, Tag, <<Line/binary, ${, BytesAsBinary/binary, $}, LastPartialLine/binary>>, [], Acc, Module);
 process_line(_ContinuationBytes, ParseTaggedLine, IsTagged, Tag, LastPartialLine, Line, [NextLine|MoreLines], Acc, Module) ->
     { StrippedNextLine, NextContinuationBytes } = eimap_utils:num_literal_continuation_bytes(NextLine),
     io:format("Connected up the next line: ~p ~i~n", [StrippedNextLine, NextContinuationBytes]),
