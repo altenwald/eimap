@@ -24,7 +24,8 @@
          ensure_binary/1,
          new_imap_compressors/0,
          only_full_lines/1,
-         binary_to_atom/1
+         binary_to_atom/1,
+         num_literal_continuation_bytes/1
         ]).
 
 %% Translate the folder name in to a fully qualified folder path such as it
@@ -96,6 +97,32 @@ is_tagged_response(Buffer, Tag) ->
         true -> tagged;
         _ -> untagged
     end.
+
+-spec num_literal_continuation_bytes(Buffer :: binary()) -> NumberBytes :: integer.
+num_literal_continuation_bytes(Buffer) when size(Buffer) < 4 ->
+    0;
+num_literal_continuation_bytes(Buffer) ->
+    BufferSize = size(Buffer),
+    case binary:part(Buffer, BufferSize - 2, 2) =:= <<"+}">> of
+        true -> number_of_bytes_in_continuation(Buffer, BufferSize);
+        false -> 0
+    end.
+
+number_of_bytes_in_continuation(Buffer, BufferSize) ->
+    OpenBracePos = find_continuation_open_brace(Buffer, BufferSize - 4),
+    confirm_continuation(Buffer, BufferSize, OpenBracePos).
+
+find_continuation_open_brace(_Buffer, 0) -> -1;
+find_continuation_open_brace(Buffer, Pos) ->
+    case binary:at(Buffer, Pos) of
+        ${ -> Pos;
+        _ -> find_continuation_open_brace(Buffer, Pos - 1)
+    end.
+
+confirm_continuation(_Buffer, _BufferSize, -1) ->
+    0;
+confirm_continuation(Buffer, BufferSize, OpenBracePos) ->
+    binary_to_integer(binary:part(Buffer, OpenBracePos + 1, BufferSize - OpenBracePos - 3)).
 
 -spec remove_tag_from_response(Buffer :: binary(), Tag :: undefine | binary(), Check :: check | trust) -> Command :: binary().
 remove_tag_from_response(Buffer, undefined, _) ->

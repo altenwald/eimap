@@ -179,3 +179,17 @@ parse_flags_test_() ->
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:parse_flags(Input)) | Acc] end, [], Data).
 
+num_literal_continuation_bytes_test_() ->
+    Data =
+    [
+        { <<"abcd">>, 0 },
+        { <<"abcd{100+}">>, 100 },
+        { <<"123abcd{100+}">>, 100 },
+        { <<"abcd{5+}">>, 5 },
+        { <<"abcd100+}">>, 0 },
+        { <<"abcd{100}">>, 0 },
+        { <<"abcd100+}">>, 0 }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:num_literal_continuation_bytes(Input)) | Acc] end, [], Data).
+
+
