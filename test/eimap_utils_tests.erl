@@ -105,10 +105,10 @@ is_tagged_response_test_() ->
     Tag = <<"abcd">>,
     Data =
     [
-       { <<Tag/binary, " Indeed\r\n">>, true },
-       { <<Tag/binary, " Indeed">>, true },
-       { <<"one">>, false },
-       { <<"* Yeah baby">>, false }
+       { <<Tag/binary, " Indeed\r\n">>, tagged },
+       { <<Tag/binary, " Indeed">>, tagged },
+       { <<"one">>, untagged },
+       { <<"* Yeah baby">>, untagged }
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:is_tagged_response(Input, Tag)) | Acc] end, [], Data).
 

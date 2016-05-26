@@ -83,13 +83,18 @@ check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
 split_command_into_components(Buffer) when is_binary(Buffer) ->
     split_command(Buffer).
 
--spec is_tagged_response(Buffer :: binary(), Tag :: binary()) -> true | false.
+-spec is_tagged_response(Buffer :: binary(), Tag :: binary()) -> tagged | untagged.
 is_tagged_response(Buffer, Tag) ->
     TagSize = size(Tag) + 1, % The extra char is a space
     BufferSize = size(Buffer),
-    case (TagSize =< BufferSize) of
-        true -> <<Tag/binary, " ">> =:= binary:part(Buffer, 0, TagSize);
-        false -> false
+    case
+        case (TagSize =< BufferSize) of
+            true -> <<Tag/binary, " ">> =:= binary:part(Buffer, 0, TagSize);
+            _ -> false
+        end of
+
+        true -> tagged;
+        _ -> untagged
     end.
 
 -spec remove_tag_from_response(Buffer :: binary(), Tag :: undefine | binary(), Check :: check | trust) -> Command :: binary().

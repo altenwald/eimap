@@ -41,10 +41,10 @@ process_lines(ParseTaggedLine, Tag, LastPartialLine, [Line|MoreLines], Acc, Modu
     process_line(ParseTaggedLine, eimap_utils:is_tagged_response(Line, Tag), Tag, LastPartialLine, Line, MoreLines, Acc, Module).
 
 
-process_line(ParseTaggedLine, true, Tag, _LastPartialLine, Line, _MoreLines, Acc, Module) ->
+process_line(ParseTaggedLine, tagged, Tag, _LastPartialLine, Line, _MoreLines, Acc, Module) ->
     Checked = eimap_utils:check_response_for_failure(Line, Tag),
     Module:formulate_response(Checked, parse_tagged(Checked, ParseTaggedLine, Line, Acc, Module));
-process_line(ParseTaggedLine, false, Tag, LastPartialLine, Line, MoreLines, Acc, Module) ->
+process_line(ParseTaggedLine, untagged, Tag, LastPartialLine, Line, MoreLines, Acc, Module) ->
     process_lines(ParseTaggedLine, Tag, LastPartialLine, MoreLines, Module:process_line(Line, Acc), Module).
 
 formulate_response(ok, Data) -> { fini, Data };
