@@ -98,14 +98,14 @@ is_tagged_response(Buffer, Tag) ->
         _ -> untagged
     end.
 
--spec num_literal_continuation_bytes(Buffer :: binary()) -> NumberBytes :: integer.
+-spec num_literal_continuation_bytes(Buffer :: binary()) -> { BufferSansContinuation :: binary(), NumberBytes :: integer() }.
 num_literal_continuation_bytes(Buffer) when size(Buffer) < 4 ->
-    0;
+    { Buffer, 0 };
 num_literal_continuation_bytes(Buffer) ->
     BufferSize = size(Buffer),
     case binary:part(Buffer, BufferSize - 2, 2) =:= <<"+}">> of
         true -> number_of_bytes_in_continuation(Buffer, BufferSize);
-        false -> 0
+        false -> { Buffer, 0 }
     end.
 
 number_of_bytes_in_continuation(Buffer, BufferSize) ->
@@ -119,10 +119,14 @@ find_continuation_open_brace(Buffer, Pos) ->
         _ -> find_continuation_open_brace(Buffer, Pos - 1)
     end.
 
-confirm_continuation(_Buffer, _BufferSize, -1) ->
-    0;
+confirm_continuation(Buffer, _BufferSize, -1) ->
+    { Buffer, 0 };
 confirm_continuation(Buffer, BufferSize, OpenBracePos) ->
-    binary_to_integer(binary:part(Buffer, OpenBracePos + 1, BufferSize - OpenBracePos - 3)).
+    try binary_to_integer(binary:part(Buffer, OpenBracePos + 1, BufferSize - OpenBracePos - 3)) of
+        Result -> { binary:part(Buffer, 0, OpenBracePos), Result }
+    catch
+        _:_ -> { Buffer, 0 }
+    end.
 
 -spec remove_tag_from_response(Buffer :: binary(), Tag :: undefine | binary(), Check :: check | trust) -> Command :: binary().
 remove_tag_from_response(Buffer, undefined, _) ->
