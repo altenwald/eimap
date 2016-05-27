@@ -18,7 +18,7 @@ Usage
 To use eimap from your imap application add the following line to your rebar
 config:
 
-    { eimap, "*", {git, "git://git.kolab.org/diffusion/EI/eimap.git" }
+    { eimap, "*", {git, "git://git.kolab.org/diffusion/EI/eimap.git" } }
 
 There is no need to start the eimap application as it does not have any process
 or startup routines related to its usage. eimap does rely on lager being avilable,
@@ -28,7 +28,7 @@ eimap Module
 ============
 The eimap erlang module is the home of the primary API for the eimap library. It
 is a gen_fsm and should be started as a process in the normal Erlang/OTP manner for
-use. 
+use.
 
 An eimap instance represents a single IMAP connection to a single IMAP server
 and is stateful: commands that are started may change the selected folder, for
@@ -38,14 +38,14 @@ execution depeding on the current state of the connection.
 Once started, an eimap process may be directed to connect to an imap server
 and then start with functions such as fetching path tokens:
 
-    ImapServerArgs = #eimap_server_config{ host = "acme.com" },
+    ImapServerArgs = [ { host, "imap.acme.com" }, { port, 143 }, { tls, starttls } ]
     { ok, Imap } = eimap:start_link(ImapServerArgs),
     eimap_imap:starttls(),
     eimap_imap:login(Imap, self(), undefined, "username", "password"),
     eimap_imap:connect(Imap),
     eimap_imap:get_path_tokens(Imap, self(), get_path_tokens)
 
-The eimap_server_config record is defined in eimap.hrl and allows one to set
+The Imap server args is a simple proplist which allows one to set
 host, port and TLS settings. For TLS, the following values are supported:
 
     * true: start a TLS session when opening the socket ("implicit TLS")
