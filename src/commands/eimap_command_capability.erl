@@ -17,31 +17,34 @@
 
 -module(eimap_command_capability).
 -behavior(eimap_command).
--export([new/1, parse/2]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% http://tools.ietf.org/html/rfc2342
 
 %% Public API
-new(_Args) -> <<"CAPABILITY">>.
+new_command(parse_serverid) -> { <<"CAPABILITY">>, single_line_response };
+new_command(_Args) -> { <<"CAPABILITY">>, multiline_response }.
 
-parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Data, Tag),
-                                      eimap_utils:remove_tag_from_response(Data, Tag, check)).
+process_line(<<"* CAPABILITY ", Data/binary>>, Acc) ->
+    [Data|Acc];
+process_line(_Data, Acc) -> Acc.
 
+formulate_response(ok, Response) -> { fini, Response };
+formulate_response({ _, Reason }, _Data) -> { error, Reason };
+formulate_response(Data, Tag) -> parse_oneliner(eimap_utils:check_response_for_failure(Data, Tag),
+                                                eimap_utils:remove_tag_from_response(Data, Tag, check)).
 
 %% Private API
 % TODO: probably way too cyrus imap specific on the responses (capitalization, etc)
 % make generic with a nicer parser
-formulate_reponse(ok, <<"* OK [CAPABILITY ", Data/binary>>) ->
+parse_oneliner(ok, <<"* OK [CAPABILITY ", Data/binary>>) ->
     % this is a server response on connect
     { End, _ } = binary:match(Data, <<"]">>),
     { TextEnd, _ } = binary:match(Data, <<"\r\n">>),
     Capabilities = binary:part(Data, { 0, End }),
     ServerID = binary:part(Data, { End + 2, TextEnd - End  - 2}),
     { fini, { Capabilities, ServerID } };
-formulate_reponse(ok, <<"* CAPABILITY ", Data/binary>>) ->
-    { End, _ } = binary:match(Data, <<"\r\n">>),
-    Capabilities = binary:part(Data, { 0, End }),
-    { fini, Capabilities };
-formulate_reponse(ok, Data) -> Data;
-formulate_reponse({ _, Reason }, _Data) -> { error, Reason }.
+parse_oneliner({ _, Reason }, _Data) -> { error, Reason };
+parse_oneliner(_, Data) -> { fini, Data }.
+
 

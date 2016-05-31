@@ -17,19 +17,19 @@
 
 -module(eimap_command_login).
 -behavior(eimap_command).
--export([new/1, parse/2]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% http://tools.ietf.org/html/rfc2342
 
 %% Public API
-new({ User, Password }) ->
+new_command({ User, Password }) ->
     UserBin = eimap_utils:ensure_binary(User),
     PasswordBin = eimap_utils:ensure_binary(Password),
-    <<"LOGIN ", UserBin/binary, " ", PasswordBin/binary>>.
+    { <<"LOGIN ", UserBin/binary, " ", PasswordBin/binary>>, multiline_response }.
 
-parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Data, Tag)).
+process_line(_Data, Acc) -> Acc.
 
 %% Private API
-formulate_reponse(ok) -> { fini, authed };
-formulate_reponse({ _, Reason }) -> { error, Reason }.
+formulate_response(ok, _Acc) -> { fini, authed };
+formulate_response({ _, Reason }, _Acc) -> { error, Reason }.
 

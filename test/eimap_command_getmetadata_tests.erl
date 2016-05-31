@@ -57,17 +57,21 @@ parse_test_() ->
           { error, <<"Uh uh uh">> }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command_getmetadata:parse(Response, Tag))|Acc] end, [], Data).
+    lists:foldl(fun({ Response, Tag, Parsed }, Acc) ->
+                        [?_assertEqual(Parsed, eimap_command:parse_response(multiline_response, Response, Tag, eimap_command_getmetadata))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
     [
         % input, output
-        { { <<>> }, <<"GETMETADATA (DEPTH infinity) \"\"">> },
-        { { <<>>, [<<"/shared/comment">>, "/private/comment"] }, <<"GETMETADATA (DEPTH infinity) \"\" (/shared/comment /private/comment)">> },
-        { { <<"/my/folder">>, [<<"/shared/comment">>, "/private/comment"] }, <<"GETMETADATA (DEPTH infinity) \"/my/folder\" (/shared/comment /private/comment)">> },
-        { { "/my/folder", [<<"/shared/comment">>, "/private/comment"] }, <<"GETMETADATA (DEPTH infinity) \"/my/folder\" (/shared/comment /private/comment)">> },
-        { { <<"/my/folder">> }, <<"GETMETADATA (DEPTH infinity) \"/my/folder\"">> }
+        { { <<>> }, { <<"GETMETADATA (DEPTH infinity) \"\"">>, multiline_response } },
+        { { <<>>, [<<"/shared/comment">>, "/private/comment"] }, { <<"GETMETADATA (DEPTH infinity) \"\" (/shared/comment /private/comment)">>, multiline_response } },
+        { { <<"/my/folder">>, [<<"/shared/comment">>, "/private/comment"] }, { <<"GETMETADATA (DEPTH infinity) \"/my/folder\" (/shared/comment /private/comment)">>, multiline_response } },
+        { { "/my/folder", [<<"/shared/comment">>, "/private/comment"] }, { <<"GETMETADATA (DEPTH infinity) \"/my/folder\" (/shared/comment /private/comment)">>, multiline_response } },
+        { { <<"/my/folder">> }, { <<"GETMETADATA (DEPTH infinity) \"/my/folder\"">>, multiline_response } },
+        { { <<"/my/folder">>, [], 10, 100 }, { <<"GETMETADATA (DEPTH 10 MAXSIZE 100) \"/my/folder\"">>, multiline_response } },
+        { { <<"/my/folder">>, [], 10, none}, { <<"GETMETADATA (DEPTH 10) \"/my/folder\"">>, multiline_response } },
+        { { <<"/my/folder">>, [], none, 100 }, { <<"GETMETADATA (MAXSIZE 100) \"/my/folder\"">>, multiline_response } }
     ],
-    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_getmetadata:new(Params))|Acc] end, [], Data).
+    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_getmetadata:new_command(Params))|Acc] end, [], Data).
 

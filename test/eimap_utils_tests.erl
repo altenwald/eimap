@@ -79,6 +79,7 @@ split_command_into_components_test_() ->
     Data =
     [
         { { <<>>, <<>>, <<>> }, <<>> },
+        { { <<".">>, <<"LIST">>, <<"\"\" \"*\"">> }, <<". LIST \"\" \"*\"">> },
         { { <<"1">>, <<"STARTTLS">>, <<>> }, <<"1 STARTTLS">> },
         { { <<"1">>, <<"STARTTLS">>, <<>> }, <<"1 STARTTLS\r\n">> },
         { { <<"3">>, <<"ID">>, <<"(\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }, <<"3 ID (\"name\" \"Thunderbird\" \"version\" \"38.3.0\")">> }
@@ -104,10 +105,10 @@ is_tagged_response_test_() ->
     Tag = <<"abcd">>,
     Data =
     [
-       { <<Tag/binary, " Indeed\r\n">>, true },
-       { <<Tag/binary, " Indeed">>, true },
-       { <<"one">>, false },
-       { <<"* Yeah baby">>, false }
+       { <<Tag/binary, " Indeed\r\n">>, tagged },
+       { <<Tag/binary, " Indeed">>, tagged },
+       { <<"one">>, untagged },
+       { <<"* Yeah baby">>, untagged }
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:is_tagged_response(Input, Tag)) | Acc] end, [], Data).
 
@@ -166,4 +167,32 @@ only_full_lines_test_() ->
         { <<"nope\r\nyep\r\nhohoho\r\n">>, { <<"nope\r\nyep\r\nhohoho\r\n">>, <<>> } }
     ],
     lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:only_full_lines(Input)) | Acc] end, [], Data).
+
+parse_flags_test_() ->
+    Data =
+    [
+        { <<"()">>, [] },
+        { <<>>, [] },
+        { <<"\\\\Answered \\\\Flagged \\\\Draft \\\\Deleted \\\\Seen">>, [<<"\\\\Answered">>, <<"\\\\Flagged">>, <<"\\\\Draft">>, <<"\\\\Deleted">>, <<"\\\\Seen">> ] },
+        { <<"(\\\\Answered \\\\Flagged \\\\Draft \\\\Deleted \\\\Seen)">>, [<<"\\\\Answered">>, <<"\\\\Flagged">>, <<"\\\\Draft">>, <<"\\\\Deleted">>, <<"\\\\Seen">> ] },
+        { "(\\\\Answered \\\\Flagged \\\\Draft \\\\Deleted \\\\Seen)", [<<"\\\\Answered">>, <<"\\\\Flagged">>, <<"\\\\Draft">>, <<"\\\\Deleted">>, <<"\\\\Seen">> ] }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:parse_flags(Input)) | Acc] end, [], Data).
+
+num_literal_continuation_bytes_test_() ->
+    Data =
+    [
+        { <<"abcd">>, { <<"abcd">>, 0 } },
+        { <<"abcd{5}">>, { <<"abcd">>, 5 } },
+        { <<"abcd{100}">>, { <<"abcd">>, 100 } },
+        { <<"123abcd{100}">>, { <<"123abcd">>, 100  } },
+        { <<"ab{123abcd{100}">>, { <<"ab{123abcd">>, 100  } },
+        { <<"ab{123abcd{1{00}">>, { <<"ab{123abcd{1">>, 0 } },
+        { <<"abcd{aa0}">>, { <<"abcd{aa0}">>, 0 } },
+        { <<"abcd{10aa0}">>, { <<"abcd{10aa0}">>, 0 } },
+        { <<"abcd100}">>, { <<"abcd100}">>, 0 } },
+        { <<"abcd100}">>, { <<"abcd100}">>, 0 } }
+    ],
+    lists:foldl(fun({ Input, Output}, Acc) -> [?_assertEqual(Output, eimap_utils:num_literal_continuation_bytes(Input)) | Acc] end, [], Data).
+
 

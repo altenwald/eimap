@@ -20,6 +20,25 @@
 
 % c("test/eimap_uidset_tests.erl"). eunit:test(eimap_uidset).
 
+new_test_() ->
+    Data =
+    [
+        % input, output
+        { [4], <<"4">> },
+        { [1, 2, 3, 4], <<"1,2,3,4">> },
+        { [-1, 1, 2, 3, 4], <<"1,2,3,4">> },
+        { [1, {100, 10}, 2, 3, 4], <<"1,10:100,2,3,4">> },
+        { [1, {10, 100}, 2, 3, 4], <<"1,10:100,2,3,4">> },
+        { [1, {-10, 100}, 2, 3, 4], <<"1,2,3,4">> },
+        { [1, {-100, 10}, 2, 3, 4], <<"1,2,3,4">> },
+        { [1, {-10, 100}, 2, 3, 4], <<"1,2,3,4">> },
+        { [1, {"alpha", 100}, <<"random_binary">>, some_atom, 2, 3, 4], <<"1,2,3,4">> },
+        { <<"1,2,3,4">>, <<>> },
+        { other, <<>> },
+        { [], <<>> }
+    ],
+    lists:foldl(fun({ List, Binary }, Acc) -> [?_assertEqual(Binary, eimap_uidset:uid_list_to_binary(List))|Acc] end, [], Data).
+
 single_value_test_() ->
     [
         ?_assertEqual([1], iterate_uidset(eimap_uidset:parse(<<"1,">>))),

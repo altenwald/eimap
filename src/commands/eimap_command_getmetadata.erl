@@ -17,44 +17,40 @@
 
 -module(eimap_command_getmetadata).
 -behavior(eimap_command).
--export([new/1, parse/2, continue_parse/3]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% http://tools.ietf.org/html/rfc2342
 
 %% Public API
-new({ Folder }) -> new({ Folder, [] });
-new({ Folder, Attributes }) when is_list(Folder) -> new({ list_to_binary(Folder), Attributes });
-new({ Folder, Attributes }) ->
-    AttributesList = format_attributes(Attributes, <<>>),
-    Command = <<"GETMETADATA (DEPTH infinity) \"", Folder/binary, "\"", AttributesList/binary>>,
-    Command.
+new_command({ Folder }) -> new_command({ Folder, [] });
+new_command({ Folder, Attributes }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes });
+new_command({ Folder, Attributes }) -> new_command({ Folder, Attributes, infinity, nomax });
+new_command({ Folder, Attributes, Depth, MaxSize }) ->
+    AttributesString = format_attributes(Attributes, <<>>),
+    DepthString = depth_param(Depth),
+    MaxSizeString = maxsize_param(MaxSize),
+    Command = metadata_comand(DepthString, MaxSizeString, Folder, AttributesString),
+    { Command, multiline_response }.
 
-parse(Data, Tag) -> continue_parse(Data, Tag, { <<>>, [] }).
-
-continue_parse(Data, Tag, { LastPartialLine, Acc }) ->
-    FullBuffer = <<LastPartialLine/binary, Data/binary>>,
-    { FullLinesBuffer, NewLastPartialLine } = eimap_utils:only_full_lines(FullBuffer),
-    Lines = binary:split(FullLinesBuffer, <<"\r\n">>, [global]),
-    process_line(Tag, NewLastPartialLine, Lines, Acc).
-
-
-%% Private API
-process_line(_Tag, LastPartialLine, [], Acc) -> { more, fun ?MODULE:continue_parse/3, { LastPartialLine, Acc } };
-process_line(Tag, LastPartialLine, [Line|MoreLines], Acc) ->
-    case eimap_utils:is_tagged_response(Line, Tag) of
-        true ->
-            formulate_response(eimap_utils:check_response_for_failure(Line, Tag), Acc);
-        false ->
-            process_line(Tag, LastPartialLine, MoreLines, process_metadata_response(Line, Acc))
-    end.
-
-formulate_response(ok, Data) -> { fini, Data };
-formulate_response({ _, Reason }, _Data) -> { error, Reason }.
-
-process_metadata_response(<<"* METADATA ", Details/binary>>, Acc) ->
+process_line(<<"* METADATA ", Details/binary>>, Acc) ->
     Results = parse_folder(Details),
     [Results|Acc];
-process_metadata_response(_Line, Acc) -> Acc.
+process_line(_Line, Acc) -> Acc.
+
+formulate_response(Result, Data) -> eimap_command:formulate_response(Result, Data).
+
+%% Private API
+depth_param(infinity) -> <<"DEPTH infinity">>;
+depth_param(Depth) when is_integer(Depth) -> Bin = integer_to_binary(Depth), <<"DEPTH ", Bin/binary>>;
+depth_param(_) -> <<>>.
+
+maxsize_param(Size) when is_integer(Size) -> Bin = integer_to_binary(Size), <<"MAXSIZE ", Bin/binary>>;
+maxsize_param(_) -> <<>>.
+
+metadata_comand(<<>>, <<>>, Folder, Attributes) -> <<"GETMETADATA \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_comand(Depth, <<>>, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_comand(<<>>, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_comand(Depth, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, " ", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>.
 
 format_attributes([], <<>>) -> <<>>;
 format_attributes([], String) -> <<" (", String/binary, ")">>;

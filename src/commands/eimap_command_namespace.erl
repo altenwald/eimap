@@ -17,43 +17,26 @@
 
 -module(eimap_command_namespace).
 -behavior(eimap_command).
--export([new/1, parse/2, continue_parse/3]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% http://tools.ietf.org/html/rfc2342
 
 %% Public API
-new(_Args) -> <<"NAMESPACE">>.
+new_command(_Args) -> { <<"NAMESPACE">>, multiline_response }.
 
-%TODO support multi-packet continuing parse
-parse(Data, Tag) -> continue_parse(Data, Tag, []).
-
-continue_parse(Data, Tag, Acc) ->
-    Lines = binary:split(Data, <<"\r\n">>, [global]), %%TODO partial lines
-    process_line(Tag, Lines, Acc).
+process_line(<<"* NAMESPACE ", Data/binary>>, Acc) -> [process_shared_prefix_parts(Data, 1)|Acc];
+process_line(_Line, Acc) -> Acc.
 
 
-%% Private API
-process_line(_Tag, [], Acc) -> { more, fun ?MODULE:continue_parse/3, Acc };
-process_line(Tag, [Line|MoreLines], Acc) ->
-    case eimap_utils:is_tagged_response(Line, Tag) of
-        true ->
-            formulate_response(eimap_utils:check_response_for_failure(Line, Tag), Acc);
-        false ->
-            process_line(Tag, MoreLines, [process_shared_prefix_parts(Line)|Acc])
-    end.
-
-%TODO: multiline!
 formulate_response(ok, [Acc]) -> { fini, relevant_shared_prefix_parts(Acc) };
 formulate_response({ _, Reason }, _Acc) -> { error, Reason }.
 
+% Private API
 relevant_shared_prefix_parts([]) -> { none, none};
 relevant_shared_prefix_parts([[], [], _]) -> { none, none };
 relevant_shared_prefix_parts([[], Delim]) -> { none, Delim };
 relevant_shared_prefix_parts([SharedPrefix, [], _]) -> { SharedPrefix, "/" };
 relevant_shared_prefix_parts([SharedPrefix, Delim]) -> { SharedPrefix, Delim }.
-
-process_shared_prefix_parts(<<"* NAMESPACE ", Data/binary>>) -> process_shared_prefix_parts(Data, 1);
-process_shared_prefix_parts(_) -> [].
 
 process_shared_prefix_parts(<<"NIL ", Data/binary>>, PartNumber) ->
     process_shared_prefix_parts(Data, PartNumber + 1);

@@ -19,15 +19,18 @@
 -export([
          extract_path_from_uri/3, extract_uidset_from_uri/1,
          split_command_into_components/1, is_tagged_response/2, remove_tag_from_response/3,
-         header_name/1,
+         header_name/1, parse_flags/1,
          check_response_for_failure/2,
          ensure_binary/1,
          new_imap_compressors/0,
-         only_full_lines/1
+         only_full_lines/1,
+         binary_to_atom/1,
+         num_literal_continuation_bytes/1
         ]).
 
 %% Translate the folder name in to a fully qualified folder path such as it
 %% would be used by a cyrus administrator.
+-spec extract_path_from_uri(SharedPrefix :: binary(), HierarchyDelim :: binary, URI :: binary()) -> Path :: binary() | bad_uri.
 extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_binary(URI) ->
     extract_path_from_uri(SharedPrefix, HierarchyDelim, binary_to_list(URI));
 extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_list(URI) ->
@@ -39,6 +42,7 @@ extract_path_from_uri(SharedPrefix, HierarchyDelim, URI) when is_list(URI) ->
         Error -> Error
     end.
 
+-spec extract_uidset_from_uri(URI :: binary()) -> UIDSet:: binary().
 extract_uidset_from_uri(URI) when is_binary(URI) ->
     { TagStart, TagEnd } = binary:match(URI, <<";UID=">>),
     UIDStart = TagStart + TagEnd + 1,
@@ -48,10 +52,22 @@ extract_uidset_from_uri(URI) when is_binary(URI) ->
         { Semicolon, _ } -> binary:part(URI, UIDStart - 1, Semicolon - UIDStart + 1)
     end.
 
+-spec header_name(mailbox_uid | groupware_uid | groupware_uid) -> binary(); (any()) -> unknown.
 header_name(mailbox_uid) -> <<"/vendor/cmu/cyrus-imapd/uniqueid">>;
 header_name(groupware_type) -> <<"X-Kolab-Type">>;
 header_name(groupware_uid) -> <<"Subject">>;
 header_name(_) -> unknown.
+
+-spec parse_flags(FlagString :: binary() | list()) -> Flags :: [binary()].
+parse_flags(String) when is_list(String) -> parse_flags(list_to_binary(String));
+parse_flags(<<"(", Parened/binary>>) ->
+    case binary:match(Parened, <<")">>) of
+        nomatch -> [];
+        { ClosingParens, _ } -> parse_flags(binary_part(Parened, 0, ClosingParens))
+    end;
+parse_flags(<<>>) -> [];
+parse_flags(FlagString) when is_binary(FlagString) ->
+    binary:split(FlagString, <<" ">>, [global]).
 
 -spec check_response_for_failure(Data :: binary(), Tag :: undefined | binary()) -> ok | { error, Reason :: binary() }.
 check_response_for_failure(Data, undefined) when is_binary(Data) ->
@@ -68,13 +84,49 @@ check_response_for_failure(Data, Tag) when is_binary(Data), is_binary(Tag) ->
 split_command_into_components(Buffer) when is_binary(Buffer) ->
     split_command(Buffer).
 
--spec is_tagged_response(Buffer :: binary(), Tag :: binary()) -> true | false.
+-spec is_tagged_response(Buffer :: binary(), Tag :: binary()) -> tagged | untagged.
 is_tagged_response(Buffer, Tag) ->
     TagSize = size(Tag) + 1, % The extra char is a space
     BufferSize = size(Buffer),
-    case (TagSize =< BufferSize) of
-        true -> <<Tag/binary, " ">> =:= binary:part(Buffer, 0, TagSize);
-        false -> false
+    case
+        case (TagSize =< BufferSize) of
+            true -> <<Tag/binary, " ">> =:= binary:part(Buffer, 0, TagSize);
+            _ -> false
+        end of
+
+        true -> tagged;
+        _ -> untagged
+    end.
+
+-spec num_literal_continuation_bytes(Buffer :: binary()) -> { BufferSansContinuation :: binary(), NumberBytes :: integer() }.
+num_literal_continuation_bytes(Buffer) when size(Buffer) < 4 ->
+    { Buffer, 0 };
+num_literal_continuation_bytes(Buffer) ->
+    case binary:last(Buffer) =:= $} of
+        true -> number_of_bytes_in_continuation(Buffer);
+        false -> { Buffer, 0 }
+    end.
+
+number_of_bytes_in_continuation(Buffer) ->
+    BufferSize = size(Buffer),
+    OpenBracePos = find_continuation_open_brace(Buffer, BufferSize - 3),
+    confirm_continuation(Buffer, OpenBracePos).
+
+find_continuation_open_brace(_Buffer, 0) -> -1;
+find_continuation_open_brace(Buffer, Pos) ->
+    case binary:at(Buffer, Pos) of
+        ${ -> Pos;
+        _ -> find_continuation_open_brace(Buffer, Pos - 1)
+    end.
+
+confirm_continuation(Buffer, -1) ->
+    { Buffer, 0 };
+confirm_continuation(Buffer, OpenBracePos) ->
+    BufferSize = size(Buffer),
+    try binary_to_integer(binary:part(Buffer, OpenBracePos + 1, BufferSize - OpenBracePos - 2)) of
+        Result -> { binary:part(Buffer, 0, OpenBracePos), Result }
+    catch
+        _:_ -> { Buffer, 0 }
     end.
 
 -spec remove_tag_from_response(Buffer :: binary(), Tag :: undefine | binary(), Check :: check | trust) -> Command :: binary().
@@ -187,6 +239,8 @@ only_full_lines(Buffer) ->
 
 only_full_lines(Buffer, BufferLength, $\n, Pos) when Pos =:= BufferLength -> { Buffer, <<>> };
 only_full_lines(Buffer, BufferLength, $\n, Pos) -> { binary:part(Buffer, 0, Pos + 1), binary:part(Buffer, Pos + 1, BufferLength - Pos - 1) };
-only_full_lines(Buffer, BufferLength, _, 0) -> { <<>>, Buffer };
+only_full_lines(Buffer, _BufferLength, _, 0) -> { <<>>, Buffer };
 only_full_lines(Buffer, BufferLength, _, Pos) -> only_full_lines(Buffer, BufferLength, binary:at(Buffer, Pos - 1), Pos - 1).
 
+-spec binary_to_atom(Value :: binary()) -> ValueAsAtom :: atom().
+binary_to_atom(Value) -> list_to_atom(string:to_lower(binary_to_list(Value))).

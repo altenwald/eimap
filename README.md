@@ -18,7 +18,7 @@ Usage
 To use eimap from your imap application add the following line to your rebar
 config:
 
-    { eimap, "*", {git, "git://git.kolab.org/diffusion/EI/eimap.git" }
+    { eimap, "*", {git, "git://git.kolab.org/diffusion/EI/eimap.git" } }
 
 There is no need to start the eimap application as it does not have any process
 or startup routines related to its usage. eimap does rely on lager being avilable,
@@ -28,7 +28,7 @@ eimap Module
 ============
 The eimap erlang module is the home of the primary API for the eimap library. It
 is a gen_fsm and should be started as a process in the normal Erlang/OTP manner for
-use. 
+use.
 
 An eimap instance represents a single IMAP connection to a single IMAP server
 and is stateful: commands that are started may change the selected folder, for
@@ -38,14 +38,14 @@ execution depeding on the current state of the connection.
 Once started, an eimap process may be directed to connect to an imap server
 and then start with functions such as fetching path tokens:
 
-    ImapServerArgs = #eimap_server_config{ host = "acme.com" },
+    ImapServerArgs = [ { host, "imap.acme.com" }, { port, 143 }, { tls, starttls } ]
     { ok, Imap } = eimap:start_link(ImapServerArgs),
     eimap_imap:starttls(),
     eimap_imap:login(Imap, self(), undefined, "username", "password"),
     eimap_imap:connect(Imap),
     eimap_imap:get_path_tokens(Imap, self(), get_path_tokens)
 
-The eimap_server_config record is defined in eimap.hrl and allows one to set
+The Imap server args is a simple proplist which allows one to set
 host, port and TLS settings. For TLS, the following values are supported:
 
     * true: start a TLS session when opening the socket ("implicit TLS")
@@ -110,15 +110,53 @@ directory, and this is the prefered mechanism for adding features to eimap.
 The API for commands is defined in src/eimap_command.erl as a behavior. Commands
 are expected to provide at least two functions:
 
-    new(Args): create a command bitstring to be passed to the imap server
-               Args is specific to the command, and some commands ignore this
-               parameter
-    parse(Data, Tag): parses a response from the imap server; the Tag is the
-               IMAP command tag sent with the command and Data is the full
-               Data buffer being process (possibly including tagged lines).
+    new_command(Args) -> { Command, ResponseType }
+        create a command bitstring to be passed to the imap server and defines
+        the type of response for this command. Response types include
+        single_line_response, multiline_response, all_multiline_response
+        and blob_response.
 
-Data to be parsed may contain multiple lines, and in the case of commands with
-large responses may only contain part of the response.
+        Args is specific to the command, and some commands
+        ignore this parameter
+
+Single line response
+--------------------
+Commands which the IMAP server will respond to with a single line in return
+should use single_line_response and must implement formulate_response/2 which
+is passed the Data and the command Tag. This usually returns one of
+{ fini, Result } or { error, Reason }, though some special commands may return
+atoms which the eimap module responds to such as starttls.
+
+Multiline Response
+------------------
+This is the most common response type and is used when the IMAP server may
+respond with zero or more untagged responses and a final tagged response.
+
+Such commands must implement:
+
+    process_line/2 which is passed one line at a time (minus newlines)
+        and a list accumulator to add responses to
+
+    formulate_response/2 which is passed ok on success or an error tuple of 
+     { [no|bad], Reason }. This should return either { fini, Response } or
+     { error, Reason } in most cases; and for that there is
+     eimap_command:formulate_response. Which means that for most commands
+     formulate_response/2 is implemented as:
+
+        formulate_response(Result, Response) -> eimap_command:formulate(Result, Response).
+
+Commands which are all_multiline_responses also must implement process_tagged_line/2
+which behaves exactly like process_line but which accepts the tagged response line
+from the IMAP server. This is useful for commands where useful information is also
+passed in the tagged response line. An example of this is the select/exmine
+commands.
+
+Unstructured (blob) responses
+-----------------------------
+Responses that do not follow the usual untagged/tagged line response pattern
+may use the blog_response type and implement parse/2 which will be passed
+the data as it arrives. The command is responsible for all buffer stitching
+across network packets, etc.
 
 In the case of partial responses, parse/2 may return { more, fun/3, State }.
 The State object allows preserving the parsing state and will be passed back to
@@ -140,15 +178,23 @@ Testing
 =======
 Tests can be run with `make tests` or `rebar eunit`.
 
-All new commands must be accompanied by tests in the test/ directory. Currently
-testing is not remotely complete in coverage (a historical accident), and this
-needs to be rectified over time. New tests welcome.
+All new commands must be accompanied by tests in the test/ directory.
 
 Contributing
 ============
 Maintainer: Aaron Seigo <aseigo@kolabsystems.com>
 Mailing list: devel@lists.kolab.com
 Project page: https://git.kolab.org/tag/eimap/
+
+This project uses the git flow workflow as described here:
+
+    http://nvie.com/posts/a-successful-git-branching-model/
+
+You can installed git flow from here:
+
+    https://github.com/nvie/gitflow
+
+Then initialize your local clone with `git flow init -d`.
 
 You can find the list of open tasks on the project page's workboard. Anything
 in the backlog is open to be worked on.

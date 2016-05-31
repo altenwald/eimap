@@ -17,15 +17,15 @@
 
 -module(eimap_command_peek_message).
 -behavior(eimap_command).
--export([new/1, parse/2, continue_parse/3]).
+-export([new_command/1, parse/2, continue_parse/3]).
 -record(parse_state, { body_size, parts, data }).
 -record(parts, { headers = <<"">>, body = <<"">>, flags = <<"">> }).
 
 %% https://tools.ietf.org/html/rfc3501#section-6.4.5
 
 %% Public API
-new(MessageID) when is_integer(MessageID) -> new(integer_to_binary(MessageID));
-new(MessageID) when is_binary(MessageID) -> <<"UID FETCH ",  MessageID/binary, " (FLAGS BODY.PEEK[HEADER] BODY.PEEK[TEXT])">>.
+new_command(MessageID) when is_integer(MessageID) -> new_command(integer_to_binary(MessageID));
+new_command(MessageID) when is_binary(MessageID) -> { <<"UID FETCH ",  MessageID/binary, " (FLAGS BODY.PEEK[HEADER] BODY.PEEK[TEXT])">>, blob_response }.
 
 continue_parse(Data, _Tag, #parse_state{ body_size = Size, parts = Parts, data = PrevData }) ->
     try_body_parse(<<PrevData/binary, Data/binary>>, Size, Parts).

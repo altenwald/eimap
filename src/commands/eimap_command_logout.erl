@@ -17,17 +17,13 @@
 
 -module(eimap_command_logout).
 -behavior(eimap_command).
--export([new/1, parse/2]).
-
-%% http://tools.ietf.org/html/rfc2342
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% Public API
-new(_Args) -> <<"LOGOUT">>.
+new_command(_Args) -> { <<"LOGOUT">>, multiline_response }.
 
-parse(Data, Tag) -> formulate_reponse(eimap_utils:check_response_for_failure(Data, Tag)).
+process_line(_Data, Acc) -> Acc.
 
-
-%% Private API
-formulate_reponse(ok) -> { close_socket, ok };
-formulate_reponse({ _, Reason }) -> { close_socket, { error, Reason } }.
+formulate_response(ok, _Data) -> { close_socket, ok };
+formulate_response({ _, Reason }, _Data) -> { close_socket, { error, Reason } }.
 

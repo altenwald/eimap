@@ -15,19 +15,16 @@
 %% You should have received a copy of the GNU General Public License
 %% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
--module(eimap_command_examine).
+-module(eimap_command_noop).
 -behavior(eimap_command).
--export([new/1, parse/2]).
+-export([new_command/1, process_line/2, formulate_response/2]).
 
 %% https://tools.ietf.org/html/rfc3501#section-6.3.2
 
 %% Public API
-new(MBox) when is_binary(MBox) -> <<"EXAMINE \"", MBox/binary, "\"">>.
+new_command(_) -> { <<"NOOP">>, multiline_response }.
 
-parse(Data, Tag) ->
-    case eimap_utils:check_response_for_failure(Data, Tag) of
-        ok -> { fini, ok };
-        { _, Reason } -> { error, Reason }
-    end.
+process_line(Data, Acc) -> eimap_command:process_status_line(Data, Acc).
 
-%% Private API
+formulate_response(Response, Acc) -> eimap_command:formulate_response(Response, Acc).
+

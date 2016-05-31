@@ -15,7 +15,7 @@
 %% You should have received a copy of the GNU General Public License
 %% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
--module(eimap_command_logout_tests).
+-module(eimap_command_noop_tests).
 -include_lib("eunit/include/eunit.hrl").
 
 parse_test_() ->
@@ -23,30 +23,47 @@ parse_test_() ->
     [
         % { Binary Response, Binary Tag, Parsed Results }
         {
-          <<"abcd OK Begin TLS negotiation now\r\n">>,
+          ok,
+          <<"* 100 EXISTS\r\n* 22 EXPUNGE\r\n* 14 FETCH (FLAGS (\\\\Answered \\\\Flagged \\\\Draft \\\\Deleted \\\\Seen))\r\n* 3 Recent\r\nabcd OK Completed\r\n">>,
           <<"abcd">>,
-          { close_socket, ok }
+          { fini,
+            [
+             { recent, 3 },
+             { fetch, 14 },
+             { expunge, 22 },
+             { exists, 100 }
+            ]
+          }
         },
         {
+          ok,
+          <<"abcd OK Completed\r\n">>,
+          <<"abcd">>,
+          { fini, [] }
+        },
+        {
+          ok,
           <<"abcd BAD Uh uh uh\r\n">>,
           <<"abcd">>,
-          { close_socket, { error, <<"Uh uh uh">> } }
+          { error, <<"Uh uh uh">> }
         },
         {
+          ok,
           <<"abcd NO Uh uh uh\r\n">>,
           <<"abcd">>,
-          { close_socket, { error, <<"Uh uh uh">> } }
+          { error, <<"Uh uh uh">> }
         }
     ],
-    lists:foldl(fun({ Response, Tag, Parsed }, Acc) -> [?_assertEqual(Parsed, eimap_command:parse_response(multiline_response, Response, Tag, eimap_command_logout))|Acc] end, [], Data).
+    lists:foldl(fun({ InitArgs, ServerResponse, Tag, Parsed }, Acc) ->
+                        { _Command, ResponseType } = eimap_command_noop:new_command(InitArgs),
+                        [?_assertEqual(Parsed, eimap_command:parse_response(ResponseType, ServerResponse, Tag, eimap_command_noop))|Acc] end, [], Data).
 
 new_test_() ->
     Data =
     [
         % input, output
-        { <<>>, { <<"LOGOUT">>, multiline_response } },
-        { true, { <<"LOGOUT">>, multiline_response } },
-        { [], { <<"LOGOUT">>, multiline_response } }
+        { ok, { <<"NOOP">>, multiline_response } },
+        { <<>>, { <<"NOOP">>, multiline_response } }
     ],
-    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_logout:new_command(Params))|Acc] end, [], Data).
+    lists:foldl(fun({ Params, Command }, Acc) -> [?_assertEqual(Command, eimap_command_noop:new_command(Params))|Acc] end, [], Data).
 
