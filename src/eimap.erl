@@ -200,13 +200,6 @@ wait_response({ data, Data }, #state{ current_command = #command{ response_type 
     Response = eimap_command:parse_response(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
     next_command_after_response(Response, State);
-<<<<<<< HEAD
-wait_response({ data, Data }, #state{ parse_state = ParseState, current_command = #command{ parse_fun = Fun, tag = Tag } } = State) when is_function(Fun, 3) ->
-    Response = Fun(Data, Tag, ParseState),
-    %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
-    next_command_after_response(Response, State);
-=======
->>>>>>> release/0.2
 wait_response(process_command_queue, State) ->
     % ignore this one, we'll get to it when the response comes
     { next_state, wait_response, State }.
@@ -229,16 +222,6 @@ handle_event({ connect, _From, _ResponseToken }, _Statename, State) ->
 handle_event(disconnect, _StateName, State) ->
     close_socket(State),
     { next_state, disconnected, reset_state(State) };
-handle_event({ start_passthrough, Receiver }, StateName, State) ->
-    { next_state, StateName, State#state{ passthrough = true, passthrough_recv = Receiver } };
-handle_event(stop_passthrough, StateName, State) ->
-    NextState = case StateName of
-                    passthrough ->
-                        gen_fsm:send_event(self(), process_command_queue),
-                        idle;
-                    State -> State
-                end,
-    { next_state, NextState, State#state{ passthrough = false } };
 handle_event({ ready_command, Command }, StateName, State) when is_record(Command, command) ->
     ?MODULE:StateName(Command, State);
 handle_event({ start_passthrough, Receiver }, StateName, State) ->
