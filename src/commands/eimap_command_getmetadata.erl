@@ -25,6 +25,9 @@
 new_command({ Folder }) -> new_command({ Folder, [] });
 new_command({ Folder, Attributes }) -> new_command({ Folder, Attributes, infinity, nomax });
 
+%% Depth and MaxSize are both optional arguments, so we have a 4-tuple version of new_command to accomodate this
+%% "Depth, Maxsize" could be replaced with a proplist of the form [ { depth, Depth }, { maxsize, MaxSize } ] but
+%% as this is an internal (to eimap) API there is little benefit for the performance cost
 new_command({ Folder, Attributes, Depth, MaxSize }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes, Depth, MaxSize });
 new_command({ Folder, Attributes, Depth, MaxSize }) ->
     AttributesString = format_attributes(Attributes, <<>>),
