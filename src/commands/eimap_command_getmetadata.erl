@@ -23,7 +23,6 @@
 
 %% Public API
 new_command({ Folder }) -> new_command({ Folder, [] });
-new_command({ Folder, Attributes }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes });
 new_command({ Folder, Attributes }) -> new_command({ Folder, Attributes, infinity, nomax });
 
 new_command({ Folder, Attributes, Depth, MaxSize }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes, Depth, MaxSize });
