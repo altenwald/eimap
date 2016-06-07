@@ -23,13 +23,17 @@
 
 %% Public API
 new_command({ Folder }) -> new_command({ Folder, [] });
-new_command({ Folder, Attributes }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes });
 new_command({ Folder, Attributes }) -> new_command({ Folder, Attributes, infinity, nomax });
+
+%% Depth and MaxSize are both optional arguments, so we have a 4-tuple version of new_command to accomodate this
+%% "Depth, Maxsize" could be replaced with a proplist of the form [ { depth, Depth }, { maxsize, MaxSize } ] but
+%% as this is an internal (to eimap) API there is little benefit for the performance cost
+new_command({ Folder, Attributes, Depth, MaxSize }) when is_list(Folder) -> new_command({ list_to_binary(Folder), Attributes, Depth, MaxSize });
 new_command({ Folder, Attributes, Depth, MaxSize }) ->
     AttributesString = format_attributes(Attributes, <<>>),
     DepthString = depth_param(Depth),
     MaxSizeString = maxsize_param(MaxSize),
-    Command = metadata_comand(DepthString, MaxSizeString, Folder, AttributesString),
+    Command = metadata_command(DepthString, MaxSizeString, Folder, AttributesString),
     { Command, multiline_response }.
 
 process_line(<<"* METADATA ", Details/binary>>, Acc) ->
@@ -47,10 +51,10 @@ depth_param(_) -> <<>>.
 maxsize_param(Size) when is_integer(Size) -> Bin = integer_to_binary(Size), <<"MAXSIZE ", Bin/binary>>;
 maxsize_param(_) -> <<>>.
 
-metadata_comand(<<>>, <<>>, Folder, Attributes) -> <<"GETMETADATA \"", Folder/binary, "\"", Attributes/binary>>;
-metadata_comand(Depth, <<>>, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
-metadata_comand(<<>>, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
-metadata_comand(Depth, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, " ", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>.
+metadata_command(<<>>, <<>>, Folder, Attributes) -> <<"GETMETADATA \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_command(Depth, <<>>, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_command(<<>>, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>;
+metadata_command(Depth, MaxSize, Folder, Attributes) -> <<"GETMETADATA (", Depth/binary, " ", MaxSize/binary, ") \"", Folder/binary, "\"", Attributes/binary>>.
 
 format_attributes([], <<>>) -> <<>>;
 format_attributes([], String) -> <<" (", String/binary, ")">>;

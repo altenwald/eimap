@@ -69,6 +69,7 @@ new_test_() ->
         { { <<"/my/folder">>, [<<"/shared/comment">>, "/private/comment"] }, { <<"GETMETADATA (DEPTH infinity) \"/my/folder\" (/shared/comment /private/comment)">>, multiline_response } },
         { { "/my/folder", [<<"/shared/comment">>, "/private/comment"] }, { <<"GETMETADATA (DEPTH infinity) \"/my/folder\" (/shared/comment /private/comment)">>, multiline_response } },
         { { <<"/my/folder">> }, { <<"GETMETADATA (DEPTH infinity) \"/my/folder\"">>, multiline_response } },
+        { { "/my/folder", [], 10, 100 }, { <<"GETMETADATA (DEPTH 10 MAXSIZE 100) \"/my/folder\"">>, multiline_response } },
         { { <<"/my/folder">>, [], 10, 100 }, { <<"GETMETADATA (DEPTH 10 MAXSIZE 100) \"/my/folder\"">>, multiline_response } },
         { { <<"/my/folder">>, [], 10, none}, { <<"GETMETADATA (DEPTH 10) \"/my/folder\"">>, multiline_response } },
         { { <<"/my/folder">>, [], none, 100 }, { <<"GETMETADATA (MAXSIZE 100) \"/my/folder\"">>, multiline_response } }
