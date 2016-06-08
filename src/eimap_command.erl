@@ -49,7 +49,7 @@ process_line(0, ParseTaggedLine, tagged, Tag, _LastPartialLine, Line, _MoreLines
     Checked = eimap_utils:check_response_for_failure(Line, Tag),
     Module:formulate_response(Checked, parse_tagged(Checked, ParseTaggedLine, Line, Acc, Module));
 process_line(0, ParseTaggedLine, untagged, Tag, LastPartialLine, Line, MoreLines, Acc, Module) ->
-    io:format("Calling it here with ~p~n~n...", [Line]),
+    %io:format("Calling it here with ~p~n~n...", [Line]),
     process_lines(ParseTaggedLine, Tag, LastPartialLine, MoreLines, Module:process_line(Line, Acc), Module);
 process_line(ContinuationBytes, ParseTaggedLine, _IsTagged, Tag, LastPartialLine, Line, [], Acc, Module) ->
     %% the line was continued, but there is no more lines ... so this line is now our last partial line. more must be on its way

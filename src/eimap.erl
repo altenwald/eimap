@@ -49,7 +49,7 @@
                  command_serial = 1, command_queue = queue:new(),
                  current_command, current_mbox,
                  passthrough = false, passthrough_recv, passthrough_send_buffer = <<>>,
-                 inflator, deflator}).
+                 inflator, deflator, process_command_queue_guard = false }).
 -record(command, { tag, mbox, message, from, response_type, response_token, parse_state }).
 
 -define(SSL_UPGRADE_TIMEOUT, 5000).
@@ -159,19 +159,19 @@ passthrough({ data, Data }, #state{ passthrough_recv = Receiver } = State) ->
     Receiver ! { imap_server_response, Data },
     { next_state, passthrough, State };
 passthrough(Command, State) when is_record(Command, command) ->
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, enque_command(Command, State) }.
+    NewState = ensure_process_command_queue(State),
+    { next_state, idle, enque_command(Command, NewState) }.
 
 idle(process_command_queue, #state{ command_queue = Queue } = State) ->
+    UnguardedState = State#state{ process_command_queue_guard = false },
     case queue:out(Queue) of
        { { value, Command }, ModifiedQueue } when is_record(Command, command) ->
             %lager:info("Clearing queue of ~p", [Command]),
-            NewState = send_command(Command, State#state{ command_queue = ModifiedQueue }),
+            NewState = send_command(Command, UnguardedState#state{ command_queue = ModifiedQueue }),
             { next_state, wait_response, NewState };
-       { empty, ModifiedQueue } ->
+       { empty, _ModifiedQueue } ->
             NextState = next_state_after_emptied_queue(State),
-            %lager:info("Queue was empty moving on to ... ~p", [NextState]),
-            { next_state, NextState, State#state{ command_queue = ModifiedQueue } }
+            { next_state, NextState, UnguardedState }
     end;
 idle({ data, _Data }, State) ->
     %%lager:info("Idling, server sent: ~p", [_Data]),
@@ -181,7 +181,8 @@ idle(Command, State) when is_record(Command, command) ->
     NewState = send_command(Command, State),
     { next_state, wait_response, NewState };
 idle(_Event, State) ->
-    { next_state, idle, State }.
+    { next_state, idle, ensure_process_command_queue(State) }.
+
 
 next_state_after_emptied_queue(#state{ passthrough = true }) ->
     gen_fsm:send_event(self(), flush_passthrough_buffer),
@@ -189,13 +190,20 @@ next_state_after_emptied_queue(#state{ passthrough = true }) ->
 next_state_after_emptied_queue(_State) ->
     idle.
 
+ensure_process_command_queue(State) ->
+    case State#state.process_command_queue_guard of
+        true ->
+            State;
+        _ ->
+            gen_fsm:send_event(self(), process_command_queue),
+            State#state{ process_command_queue_guard = true }
+    end.
 
 %%TODO a variant that checks "#command{ from = undefined }" to avoid parsing responses which will go undelivered?
 wait_response(Command, State) when is_record(Command, command) ->
     { next_state, wait_response, enque_command(Command, State) };
 wait_response({ data, _Data }, #state{ current_command = #command{ parse_state = undefined } } = State) ->
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State };
+    { next_state, idle, ensure_process_command_queue(State) };
 wait_response({ data, Data }, #state{ current_command = #command{ response_type = ResponseType, parse_state = CommandState , tag = Tag } } = State) ->
     Response = eimap_command:parse_response(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
@@ -227,22 +235,21 @@ handle_event({ ready_command, Command }, StateName, State) when is_record(Comman
 handle_event({ start_passthrough, Receiver }, StateName, State) ->
     { next_state, StateName, State#state{ passthrough = true, passthrough_recv = Receiver } };
 handle_event(stop_passthrough, StateName, State) ->
-    NextState = case StateName of
-                    passthrough ->
-                        gen_fsm:send_event(self(), process_command_queue),
-                        idle;
-                    State -> State
+    { NextStateName, NewState } = case StateName of
+                    passthrough -> { idle, ensure_process_command_queue(State) };
+                    StateName -> { StateName, State }
                 end,
-    { next_state, NextState, State#state{ passthrough = false } };
+    { next_state, NextStateName, NewState#state{ passthrough = false } };
 handle_event({ passthrough, Data }, passthrough, #state{ passthrough = true } = State) ->
     ?MODULE:passthrough({ passthrough, Data }, State);
 handle_event({ passthrough, Data }, StateName, #state{ passthrough = true, passthrough_send_buffer = Buffer } = State) ->
     NewBuffer = <<Buffer/binary, Data/binary>>,
+    NewState =
     case StateName of
-        idle -> gen_fsm:send_event(self(), process_command_queue);
-        _ -> ok
+        idle -> ensure_process_command_queue(State);
+        _ -> State
     end,
-    { next_state, StateName, State#state{ passthrough_send_buffer = NewBuffer } };
+    { next_state, StateName, NewState#state{ passthrough_send_buffer = NewBuffer } };
 handle_event(_Event, StateName, State) -> { next_state, StateName, State}.
 
 handle_sync_event(_Event, _From, StateName, State) -> { next_state, StateName, State}.
@@ -348,22 +355,22 @@ next_command_after_response({ more, ParseState }, State) ->
     { next_state, wait_response, State#state{ current_command = State#state.current_command#command{ parse_state = ParseState } } };
 next_command_after_response({ error, _ } = ErrorResponse, State) ->
     notify_of_response(ErrorResponse, State#state.current_command),
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ current_command = undefined } };
+    NewState = ensure_process_command_queue(State),
+    { next_state, idle, NewState#state{ current_command = undefined } };
 next_command_after_response({ fini, Response }, State) ->
     %lager:info("Notifying with ~p", [State#state.current_command]),
     notify_of_response(Response, State#state.current_command),
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ current_command = undefined } };
+    NewState = ensure_process_command_queue(State),
+    { next_state, idle, NewState#state{ current_command = undefined } };
 next_command_after_response(starttls, State) ->
     { TLSState, Socket } = upgrade_socket(State),
     %lager:info("~p Upgraded the socket ...", [self()]),
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ current_command = undefined, socket = Socket, tls_state = TLSState } };
+    NewState = ensure_process_command_queue(State),
+    { next_state, idle, NewState#state{ current_command = undefined, socket = Socket, tls_state = TLSState } };
 next_command_after_response(compression_active, State) ->
     { Inflator, Deflator } = eimap_utils:new_imap_compressors(),
-    gen_fsm:send_event(self(), process_command_queue),
-    { next_state, idle, State#state{ current_command = undefined, inflator = Inflator, deflator = Deflator } };
+    NewState = ensure_process_command_queue(State),
+    { next_state, idle, NewState#state{ current_command = undefined, inflator = Inflator, deflator = Deflator } };
 next_command_after_response({ close_socket, Response }, State) ->
     notify_of_response(Response, State#state.current_command),
     { stop, normal, State }.
