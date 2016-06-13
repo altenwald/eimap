@@ -15,10 +15,12 @@ The following is equally true, however:
 Usage
 =====
 
-To use eimap from your imap application add the following line to your rebar
-config:
+To add eimap from your application, add the following line to the deps of rebar.config:
 
-    { eimap, "*", {git, "git://git.kolab.org/diffusion/EI/eimap.git" } }
+    * rebar 2.x: { eimap, "*", {git, "git://git.kolab.org/diffusion/EI/eimap.git" } }
+    * rebar3: eimap
+
+
 
 There is no need to start the eimap application as it does not have any process
 or startup routines related to its usage. eimap does rely on lager being avilable,
