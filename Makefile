@@ -1,21 +1,13 @@
-REBAR = $(shell which rebar || echo ./rebar)
+REBAR = $(shell which rebar3 || echo ./rebar3)
 ENABLE_STATIC = no
 
-all: deps-up eimap
-
-deps:
-	rebar get-deps
-
-deps-up: deps
-	rebar update-deps
-
-eimap:
-	ENABLE_STATIC=no rebar compile
+all:
+	ENABLE_STATIC=$(ENABLE_STATIC) $(REBAR) compile
 
 tests:
-	rebar eunit
+	$(REBAR) eunit
 
 run:
-	erl -pa ebin deps/*/ebin
+	$(REBAR) shell --apps eimap
 
 
