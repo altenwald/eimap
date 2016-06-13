@@ -16,7 +16,7 @@
                   ]
   },
   { env, [ ]},
-  { maintainers, ["Aaron Seigo <seigo@kolabsystems.com>"] },
+  { maintainers, ["Aaron Seigo"] },
   { licenses, ["LGPLv3+"] },
   { links, ["https://git.kolab.org/diffusion/EI/"] }
  ]}.
