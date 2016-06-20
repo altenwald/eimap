@@ -294,7 +294,7 @@ handle_info({ { connected, Receiver, ResponseToken }, { Capabilities, ServerID }
             send_hello_string(Capabilities, ServerID, Receiver, ResponseToken, Passthrough, PassthroughReceiver)
     end,
     { next_state, idle, State#state{ current_command = undefined, server_id = ServerID } };
-handle_info({ { posttls_capabilities, Receiver, ResponseToken }, Capabilities }, _StateName, #state{ server_id = ServerID, passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
+handle_info({ { posttls_capabilities, Receiver, ResponseToken }, [Capabilities] }, _StateName, #state{ server_id = ServerID, passthrough = Passthrough, passthrough_recv = PassthroughReceiver } = State) ->
     OurCapabilities =
         case binary:match(Capabilities, <<"STARTTLS">>) of
             nomatch -> <<Capabilities/binary, " STARTTLS">>;
