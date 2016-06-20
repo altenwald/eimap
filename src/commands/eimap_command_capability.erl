@@ -25,8 +25,8 @@
 new_command(parse_serverid) -> { <<"CAPABILITY">>, single_line_response };
 new_command(_Args) -> { <<"CAPABILITY">>, multiline_response }.
 
-process_line(<<"* CAPABILITY ", Data/binary>>, Acc) ->
-    [Data|Acc];
+process_line(<<"* CAPABILITY ", Data/binary>>, _Acc) ->
+    [Data];
 process_line(_Data, Acc) -> Acc.
 
 formulate_response(ok, Response) -> { fini, Response };
