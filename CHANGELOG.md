@@ -5,14 +5,22 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 ### Added
-- binding to a network interface (rather than an IP/host) with net_iface
 ### Changed
-- upgrade build system to rebar3
 ### Deprecated
 ### Removed
 ### Fixed
 ### Security
 
+## [0.3.0] - 2016-07-29
+### Changed
+- moved to rebar3
+
+### Fixed
+- consistency in capabilities response parsing
+
+## [0.2.5] - 2016-07-04
+### Fixed
+- improved the capabilities response parsing
 
 ## [0.2.4] - 2016-06-08
 This section contains the changes from 0.2.0 through 0.2.4
