@@ -45,6 +45,6 @@ parse_oneliner(ok, <<"* OK [CAPABILITY ", Data/binary>>) ->
     ServerID = binary:part(Data, { End + 2, TextEnd - End  - 2}),
     { fini, { Capabilities, ServerID } };
 parse_oneliner({ _, Reason }, _Data) -> { error, Reason };
-parse_oneliner(_, Data) -> { fini, Data }.
+parse_oneliner(_, Data) -> { fini, { Data, <<>> } }.
 
 
