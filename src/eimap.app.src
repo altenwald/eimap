@@ -2,7 +2,7 @@
 {application, eimap,
  [
   { description, "IMAP client implementation" },
-  { vsn, "0.2.5" },
+  { vsn, "0.3.0" },
   { registered, [] },
   { applications, [
                    kernel,
@@ -15,5 +15,8 @@
                    lager
                   ]
   },
-  { env, [ ]}
+  { env, [ ]},
+  { maintainers, ["Aaron Seigo"] },
+  { licenses, ["LGPLv3+"] },
+  { links, ["https://git.kolab.org/diffusion/EI/"] }
  ]}.

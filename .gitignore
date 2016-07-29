@@ -1,5 +1,6 @@
 *.beam
 .rebar
+rebar.lock
 erl_crash.dump
 ebin
 deps
@@ -8,3 +9,4 @@ log
 .*.swp
 Mnesia*
 .eunit
+_build
