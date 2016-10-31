@@ -16,7 +16,7 @@
 %% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 -module(eimap_uidset).
--export([uid_list_to_binary/1, parse/1, next_uid/1]).
+-export([uid_list_to_binary/1, empty_uidset/0, parse/1, next_uid/1]).
 
 % for internal use only
 -export([add_uid_as_binary_to_list/2, stitch_bin_list/2]).
@@ -38,6 +38,8 @@ parse(UidSet) when is_binary(UidSet) ->
     catch
         _:_ -> badarg
     end.
+
+empty_uidset() -> #uidset{}.
 
 next_uid(#uidset{ tokens = Tokens, current = Current }) -> next_uid(Tokens, Current).
 next_uid([], _Current) -> { none, #uidset {} };
