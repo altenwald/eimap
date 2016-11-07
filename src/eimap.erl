@@ -97,6 +97,7 @@ get_folder_metadata(EImap, From, ResponseToken, Folder, Properties) ->
 
 -spec get_folder_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Folder :: list() | binary(), Properties:: [list() | binary()], Depth :: infinity | integer(), MaxSize :: nomax | integer()) -> ok.
 get_folder_metadata(EImap, From, ResponseToken, Folder, Properties, Depth, MaxSize) ->
+    io:format("~~~~ Getting IMAP metadata for folder ~p to send back to ~p~n", [Folder, From]),
     send_command_to_queue(EImap, From, ResponseToken, eimap_command_getmetadata, { Folder, Properties, Depth, MaxSize }).
 
 -spec get_server_metadata(EImap :: pid(), From :: pid(), ResponseToken :: any(), Properties:: [list() | binary()]) -> ok.

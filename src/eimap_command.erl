@@ -32,6 +32,8 @@ multiline_parse(ParseTaggedLine, Data, Tag, { LastPartialLine, Acc, Module }) ->
     FullBuffer = <<LastPartialLine/binary, Data/binary>>,
     { FullLinesBuffer, NewLastPartialLine } = eimap_utils:only_full_lines(FullBuffer),
     Lines = binary:split(FullLinesBuffer, <<"\r\n">>, [global]),
+    lager:info("~~~~ Got back from server: ~p", [FullBuffer]),
+    lager:info("~~~~    This parsed into ~p", [Lines]),
     process_lines(ParseTaggedLine, Tag, NewLastPartialLine, Lines, Acc, Module);
 multiline_parse(ParseTaggedLine, Data, Tag, Module) ->
     multiline_parse(ParseTaggedLine, Data, Tag, { <<>>, [], Module }).

@@ -34,14 +34,20 @@ new_command({ Folder, Attributes, Depth, MaxSize }) ->
     DepthString = depth_param(Depth),
     MaxSizeString = maxsize_param(MaxSize),
     Command = metadata_command(DepthString, MaxSizeString, Folder, AttributesString),
+    lager:info("~~~~ Sending to imap server: ~p", [Command]),
     { Command, multiline_response }.
 
 process_line(<<"* METADATA ", Details/binary>>, Acc) ->
+    lager:info("~~~~ Line received: ~p", [Details]),
     Results = parse_folder(Details),
     [Results|Acc];
-process_line(_Line, Acc) -> Acc.
+process_line(Line, Acc) -> 
+    lager:info("~~~~ Unhelpful line received: ~p", [Line]),
+    Acc.
 
-formulate_response(Result, Data) -> eimap_command:formulate_response(Result, Data).
+formulate_response(Result, Data) -> 
+    lager:info("~~~~ Response was ~p ~p", [Result, Data]),
+    eimap_command:formulate_response(Result, Data).
 
 %% Private API
 depth_param(infinity) -> <<"DEPTH infinity">>;
