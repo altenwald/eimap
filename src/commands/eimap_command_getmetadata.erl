@@ -92,6 +92,7 @@ parse_properties(Buffer) ->
     next_property(Properties, []).
 
 next_property(<<>>, Acc) -> Acc;
+next_property(<<$ ,Rest/binary>>, Acc) -> next_property(Rest, Acc);
 next_property(Buffer, Acc) ->
     { KeyEnd, _ } = binary:match(Buffer, <<" ">>),
     Key = binary:part(Buffer, 0, KeyEnd),

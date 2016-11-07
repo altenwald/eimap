@@ -38,6 +38,11 @@ parse_test_() ->
           { fini, [ { <<"Tasks">>, [ { <<"/shared/vendor/kolab/folder-type">>, <<"task \"sigh\"">> } ] } ] }
         },
         {
+          <<"* METADATA Tasks (/shared/vendor/kolab/folder-type \"task \\\"sigh\\\"\" /private/comment \"My own comment\")\r\nabcd OK Begin TLS negotiation now\r\n">>,
+          <<"abcd">>,
+          { fini, [ { <<"Tasks">>, [ { <<"/private/comment">>, <<"My own comment">> }, { <<"/shared/vendor/kolab/folder-type">>, <<"task \"sigh\"">> } ] } ] }
+        },
+        {
           <<"* METADATA Tasks (/shared/vendor/kolab/folder-type \"task \\\"sigh\\\"\")\r\n* METADATA Archive (/shared/vendor/kolab/folder-type NIL)\r\nabcd OK Begin TLS negotiation now\r\n">>,
           <<"abcd">>,
           { fini, [
