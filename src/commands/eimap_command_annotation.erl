@@ -26,12 +26,16 @@ new_command(Folder) -> { <<"GETANNOTATION \"", Folder/binary, "\" \"*\" \"value.
 process_line(<<" ", Data/binary>>, Acc) ->
     process_line(Data, Acc);
 process_line(<<"* ANNOTATION ", Data/binary>>, Acc) ->
+    io:format("!!!! Received ~p~n", [Data]),
     Pieces = binary:split(Data, <<"\"">>, [global]),
     process_pieces(Pieces, Acc);
-process_line(<<>>, Acc) ->
+process_line(Line, Acc) ->
+    io:format("!!!! bad line? ~p~n", [Line]),
     Acc.
 
-formulate_response(Result, Data) -> eimap_command:formulate_response(Result, Data).
+formulate_response(Result, Data) ->
+    io:format("!!!! Responding with result of ~p ... and data of ~p~n", [Result, Data]),
+    eimap_command:formulate_response(Result, Data).
 
 %% Private API
 process_pieces([MBox, Key, _, _, _, Value, _], Acc) when MBox =/= <<>> -> [ { Key, translate(Value) } | Acc ];
