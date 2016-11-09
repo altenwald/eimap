@@ -488,11 +488,12 @@ joined([H|Rest], Binary) -> joined(Rest, <<Binary/binary, H/binary>>).
 
 reset_timeout(#state{ command_timeout = Timeout } = State) ->
     cancel_timeout(State),
-    TimerRef =
+    { ok, TimerRef } =
         case Timeout of
             Timeout when is_integer(Timeout), Timeout >= 0 ->
                 timer:send_after(Timeout, response_timeout);
-            _ -> none
+            _ ->
+                { ok, none }
         end,
     State#state{ command_timeout_timer = TimerRef }.
 
