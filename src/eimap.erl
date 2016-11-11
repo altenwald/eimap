@@ -49,11 +49,13 @@
                  command_serial = 1, command_queue = queue:new(),
                  current_command, current_mbox,
                  passthrough = false, passthrough_recv, passthrough_send_buffer = <<>>,
-                 inflator, deflator, process_command_queue_guard = false }).
+                 inflator, deflator, process_command_queue_guard = false,
+                 command_timeout = infinity, command_timeout_timer = none }).
 -record(command, { tag, mbox, message, from, response_type, response_token, parse_state }).
 
 -define(SSL_UPGRADE_TIMEOUT, 5000).
 -define(TCP_CONNECT_TIMEOUT, 5000).
+-define(DEFAULT_COMMAND_TIMEOUT, infinity).
 
 %% public API
 start_link(Options) when is_list(Options) -> gen_fsm:start_link(?MODULE, Options, []).
@@ -129,7 +131,8 @@ init(Options) ->
     Host = proplists:get_value(host, Options, "127.0.0.1"),
     Port = proplists:get_value(port, Options, 143),
     TLS = proplists:get_value(tls, Options, false),
-    State = #state { host = Host, port = Port, tls  = TLS },
+    CommandTimeout = proplists:get_value(command_timeout, Options, ?DEFAULT_COMMAND_TIMEOUT),
+    State = #state { host = Host, port = Port, tls = TLS, command_timeout = CommandTimeout },
     { ok, disconnected, State }.
 
 disconnected({ connect, Receiver, ResponseToken }, #state{ command_queue = CommandQueue, host = Host, port = Port, tls = TLS, socket = undefined } = State) ->
@@ -203,11 +206,13 @@ ensure_process_command_queue(State) ->
 wait_response(Command, State) when is_record(Command, command) ->
     { next_state, wait_response, enque_command(Command, State) };
 wait_response({ data, _Data }, #state{ current_command = #command{ parse_state = undefined } } = State) ->
-    { next_state, idle, ensure_process_command_queue(State) };
+    NewState = cancel_timeout(State),
+    { next_state, idle, ensure_process_command_queue(NewState) };
 wait_response({ data, Data }, #state{ current_command = #command{ response_type = ResponseType, parse_state = CommandState , tag = Tag } } = State) ->
     Response = eimap_command:parse_response(ResponseType, Data, Tag, CommandState),
     %%lager:info("Response from parser was ~p ~p, size of queue ~p", [More, Response, queue:len(State#state.command_queue)]),
-    next_command_after_response(Response, State);
+    NewState = cancel_timeout(State),
+    next_command_after_response(Response, NewState);
 wait_response(process_command_queue, State) ->
     % ignore this one, we'll get to it when the response comes
     { next_state, wait_response, State }.
@@ -307,6 +312,8 @@ handle_info({ { selected, MBox }, { error, Reason } }, StateName, State) ->
 handle_info(starttls_complete, StateName, State) ->
     %lager:info("STARTTLS completed successfully"),
     { next_state, StateName, State };
+handle_info(response_timeout, _StateName, State) ->
+    { stop, normal, State };
 handle_info(Info, StateName, State) ->
     lager:debug("handle_info called with unhandled info of ~p", [Info]),
     { next_state, StateName, State }.
@@ -459,7 +466,8 @@ send_command_now(SocketFun, #command{ message = Message } = Command, #state{ com
     Data = <<Tag/binary, " ", Message/binary, "\r\n">>,
     %lager:info("Sending command via ~p: ~s", [Fun, Data]),
     SocketFun(Socket, deflated(Data, State)),
-    State#state{ command_serial = Serial + 1, current_command = Command#command{ tag = Tag } }.
+    StateWithTimeout = reset_timeout(State),
+    StateWithTimeout#state{ command_serial = Serial + 1, current_command = Command#command{ tag = Tag } }.
 
 enque_command(Command, State) ->
     %%lager:info("Enqueuing command ~p", [Command]),
@@ -478,4 +486,19 @@ deflated(Data, #state{ deflator = Deflator }) ->  joined(zlib:deflate(Deflator, 
 joined([], Binary) -> Binary;
 joined([H|Rest], Binary) -> joined(Rest, <<Binary/binary, H/binary>>).
 
+reset_timeout(#state{ command_timeout = Timeout } = State) ->
+    cancel_timeout(State),
+    { ok, TimerRef } =
+        case Timeout of
+            Timeout when is_integer(Timeout), Timeout >= 0 ->
+                timer:send_after(Timeout, response_timeout);
+            _ ->
+                { ok, none }
+        end,
+    State#state{ command_timeout_timer = TimerRef }.
+
+cancel_timeout(#state{ command_timeout_timer = none } = State) -> State;
+cancel_timeout(#state{ command_timeout_timer = TimerRef } = State) ->
+    timer:cancel(TimerRef),
+    State#state{ command_timeout_timer = none }.
 
