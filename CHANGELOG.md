@@ -11,6 +11,15 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 ### Security
 
+## [0.4.0] - 2016-11-11
+### Added
+- optional timeout on eimap objects for server delay
+  passing in an integer command_timeout value to eimap:start_link
+  sets the timeout to that number of ms
+
+### Fixed
+- METADATA command parses multiple key/value returns correctly
+
 ## [0.3.0] - 2016-07-29
 ### Changed
 - moved to rebar3
