@@ -404,7 +404,7 @@ create_socket(Host, Port, starttls, Receiver, ResponseToken, CommandQueue) ->
 create_socket(Host, Port, _, _Receiver, _ResponseToken, CommandQueue) ->
     { gen_tcp:connect(Host, Port, socket_options(), ?TCP_CONNECT_TIMEOUT), false, self(), CommandQueue }.
 
-socket_options() -> [binary, { active, once }, { send_timeout, 5000 }].
+socket_options() -> [binary, { active, once }, { send_timeout, 5000 }, { keepalive, true }].
 
 upgrade_socket(#state{ socket = Socket, tls_state = true, current_command = Command }) ->
     notify_of_response(starttls_complete, Command),
