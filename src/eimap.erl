@@ -84,7 +84,7 @@ login(EImap, From, ResponseToken, User, Pass) ->
     send_command_to_queue(EImap, From, ResponseToken, eimap_command_login, { User, Pass }).
 
 switch_folder(EImap, From, ResponseToken, Folder) ->
-    send_command_to_queue(EImap, From, ResponseToken, eimap_command_switch_folder, Folder, Folder).
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_switch_folder, Folder).
 
 -spec logout(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
 logout(EImap, From, ResponseToken) ->
