@@ -30,7 +30,7 @@
          %% commands
          starttls/3,
          capabilities/3,
-         login/5, logout/3,
+         login/5, logout/3, switch_folder/4,
          compress/1,
          get_server_metadata/4, get_server_metadata/6,
          get_folder_status/5,
@@ -82,6 +82,9 @@ capabilities(EImap, From, ResponseToken) when is_pid(EImap) ->
 -spec login(EImap :: pid(), From :: pid(), ResponseToken :: any(), User :: list() | binary(), Pass :: list() | binary()) -> ok.
 login(EImap, From, ResponseToken, User, Pass) ->
     send_command_to_queue(EImap, From, ResponseToken, eimap_command_login, { User, Pass }).
+
+switch_folder(EImap, From, ResponseToken, Folder) ->
+    send_command_to_queue(EImap, From, ResponseToken, eimap_command_switch_folder, Folder, Folder).
 
 -spec logout(EImap :: pid(), From :: pid(), ResponseToken :: any()) -> ok.
 logout(EImap, From, ResponseToken) ->
